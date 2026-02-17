@@ -1,10 +1,26 @@
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Table
-from firebase_config import bucket, db
-from datetime import datetime
-import urllib.parse
 import streamlit as st
-import time
+import base64
+import os
+import pandas as pd
+from datetime import datetime, timedelta
+from reportlab.lib.pagesizes import A4, letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, HRFlowable
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch, cm
+from reportlab.pdfgen import canvas
+from io import BytesIO
+import urllib.parse
+from firebase_config import bucket, db, storage_available
+
+# Helper for IST Time
+def get_ist_time():
+    """Returns current time in IST (UTC + 5:30)"""
+    return datetime.utcnow() + timedelta(hours=5, minutes=30)
+
+def today_string():
+    return get_ist_time().strftime("%Y-%m-%d")
+
 
 # Custom CSS Injection
 def inject_custom_css():
