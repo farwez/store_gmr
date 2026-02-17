@@ -539,5 +539,4 @@ def generate_bill_html(items, subtotal, discount_amount, discount_type, total, c
     """
     return html
 
-def today_string():
-    return datetime.now().strftime("%Y-%m-%d")
+
