@@ -2,7 +2,7 @@ import streamlit as st
 from firebase_config import db
 from datetime import datetime, timedelta
 import pandas as pd
-from utils import inject_custom_css, render_sidebar
+from utils import inject_custom_css, render_sidebar, get_ist_time
 
 st.set_page_config(page_title="Store Management", layout="wide", page_icon="🏪")
 inject_custom_css()
@@ -13,7 +13,7 @@ st.markdown("---")
 
 # Helper function for today's date
 def today_string():
-    return datetime.now().strftime("%Y-%m-%d")
+    return get_ist_time().strftime("%Y-%m-%d")
 
 # ==================== QUICK STATS ====================
 st.subheader("📊 Today's Overview")
@@ -109,7 +109,7 @@ try:
             "Customer": data.get("customer_name", "N/A"),
             "Items": len(data.get("items", [])),
             "Total": f"₹{data.get('total', 0):,.0f}",
-            "Time": data.get("timestamp", datetime.now()).strftime("%I:%M %p") if isinstance(data.get("timestamp"), datetime) else "N/A"
+            "Time": data.get("timestamp", get_ist_time()).strftime("%I:%M %p") if isinstance(data.get("timestamp"), datetime) else "N/A"
         })
     
     if sales_data:
@@ -124,4 +124,4 @@ except Exception as e:
 
 # ==================== FOOTER ====================
 st.caption("💡 Use the sidebar to navigate between different modules")
-st.caption(f"🕐 Last updated: {datetime.now().strftime('%I:%M:%S %p')}")
+st.caption(f"🕐 Last updated: {get_ist_time().strftime('%I:%M:%S %p')}")
