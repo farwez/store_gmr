@@ -101,11 +101,40 @@ def inject_custom_css():
         /* Force Input Fields to be White with Dark Text */
         .stTextInput input, 
         .stNumberInput input, 
-        .stSelectbox div[data-baseweb="select"] > div,
         .stTextArea textarea {
             color: #1e293b !important;
             background-color: #ffffff !important;
             border-color: #cbd5e1 !important;
+        }
+        
+        /* Selectbox Container */
+        .stSelectbox div[data-baseweb="select"] > div {
+            color: #1e293b !important;
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+        }
+        
+        /* Selectbox Dropdown Menu */
+        div[data-baseweb="popover"] {
+            background-color: #ffffff !important;
+        }
+        
+        /* Selectbox Options/Items in Dropdown */
+        ul[role="listbox"] li {
+            color: #1e293b !important;
+            background-color: #ffffff !important;
+        }
+        
+        /* Selectbox Hover State */
+        ul[role="listbox"] li:hover {
+            background-color: #f1f5f9 !important;
+            color: #4F46E5 !important;
+        }
+        
+        /* Selected Option */
+        ul[role="listbox"] li[aria-selected="true"] {
+            background-color: #e0e7ff !important;
+            color: #4338ca !important;
         }
         
         /* -------------------------------------
