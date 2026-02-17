@@ -8,7 +8,8 @@ from utils import (
     inject_custom_css,
     render_sidebar,
     get_all_items,
-    generate_bill_html
+    generate_bill_html,
+    get_ist_time
 )
 import streamlit.components.v1 as components
 from datetime import datetime
@@ -41,7 +42,7 @@ if st.session_state.get("last_bill"):
                     <p style="color: #047857; margin: 2px 0 0 0; font-size: 14px;">Customer: <b>{bill['name']}</b></p>
                 </div>
             </div>
-            <div style="font-size: 12px; color: #047857;">{datetime.now().strftime('%I:%M %p')}</div>
+            <div style="font-size: 12px; color: #047857;">{get_ist_time().strftime('%I:%M %p')}</div>
         </div>
         """, unsafe_allow_html=True)
         
@@ -210,7 +211,7 @@ if cart:
                 try:
                     import os
                     os.makedirs("quotations", exist_ok=True)
-                    quote_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    quote_id = get_ist_time().strftime("%Y%m%d_%H%M%S")
                     pdf_name = f"quotations/quote_{quote_id}.pdf"
                     
                     # Prepare quote data
@@ -224,7 +225,7 @@ if cart:
                         "discount_amount": discount_amount,
                         "total": total,
                         "date": today_string(),
-                        "timestamp": datetime.now()
+                        "timestamp": get_ist_time()
                     }
                     
                     # Save to quotations collection
@@ -250,7 +251,7 @@ if cart:
                 try:
                     import os
                     os.makedirs("bills", exist_ok=True)
-                    bill_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    bill_id = get_ist_time().strftime("%Y%m%d_%H%M%S")
                     pdf_name = f"bills/bill_{bill_id}.pdf"
                     
                     # Prepare bill data
@@ -265,7 +266,7 @@ if cart:
                         "discount_amount": discount_amount,
                         "total": total,
                         "date": today_string(),
-                        "timestamp": datetime.now()
+                        "timestamp": get_ist_time()
                     }
                     
                     # Save to sales collection
