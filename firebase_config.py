@@ -7,23 +7,29 @@ import os
 try:
     if not firebase_admin._apps:
         # Check for secrets (Streamlit Cloud)
-        if hasattr(st, "secrets") and "firebase" in st.secrets:
-            # Create a dictionary from the secrets
-            # Streamlit secrets might return AttrDict, convert to normal dict for Firebase
-            key_dict = dict(st.secrets["firebase"])
-            
-            # Fix private_key formatting if needed (sometimes newline chars get messed up in secrets)
-            if "private_key" in key_dict:
-                key_dict["private_key"] = key_dict["private_key"].replace("\\n", "\n")
-            
-            cred = credentials.Certificate(key_dict)
-            firebase_admin.initialize_app(cred, {
-                "storageBucket": "stores-8f223.appspot.com"
-            })
-            print("✅ Firebase initialized from Secrets")
-            
-        # Check for local file
-        elif os.path.exists("serviceAccountKey.json"):
+        # Wrap in try-except because accessing st.secrets might error if no file exists
+        try:
+            if hasattr(st, "secrets") and "firebase" in st.secrets:
+                # Create a dictionary from the secrets
+                key_dict = dict(st.secrets["firebase"])
+                
+                # Fix private_key formatting if needed
+                if "private_key" in key_dict:
+                    key_dict["private_key"] = key_dict["private_key"].replace("\\n", "\n")
+                
+                cred = credentials.Certificate(key_dict)
+                firebase_admin.initialize_app(cred, {
+                    "storageBucket": "stores-8f223.appspot.com"
+                })
+                print("✅ Firebase initialized from Secrets")
+                # Return early if successful
+                # But we need to set st.session_state or something to indicate success? 
+                # No, just set _apps is enough.
+        except Exception:
+            pass # proceed to local file check
+
+        # Check for local file if not initialized yet
+        if not firebase_admin._apps and os.path.exists("serviceAccountKey.json"):
             cred = credentials.Certificate("serviceAccountKey.json")
             firebase_admin.initialize_app(cred, {
                 "storageBucket": "stores-8f223.appspot.com"
