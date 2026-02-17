@@ -57,12 +57,22 @@ def inject_custom_css():
             border-right: 1px solid #e2e8f0;
         }
         
-        /* Hide Native Navigation (Double Sidebar Fix) */
+        /* Hide Native Navigation (Double Sidebar Fix) - ULTRA AGGRESSIVE */
         [data-testid="stSidebarNav"],
-        [data-testid="stSidebarNavItems"] {
+        [data-testid="stSidebarNavItems"],
+        [data-testid="stSidebarNavLink"],
+        section[data-testid="stSidebar"] nav,
+        section[data-testid="stSidebar"] ul[role="navigation"],
+        .css-1544g2n,
+        .css-17lntkn,
+        div[class*="stSidebarNav"] {
             display: none !important;
+            visibility: hidden !important;
             height: 0 !important;
+            width: 0 !important;
             overflow: hidden !important;
+            position: absolute !important;
+            left: -9999px !important;
         }
 
         /* Adjust Sidebar Top Padding */
