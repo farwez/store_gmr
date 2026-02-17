@@ -10,86 +10,106 @@ import time
 def inject_custom_css():
     st.markdown("""
     <style>
-        /* Main Import - Google Fonts */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        
-        /* Global Reset & Typography */
-        html, body, [class*="css"] {
-            font-family: 'Inter', sans-serif;
-            color: #1f2937 !important; /* Force dark text */
+        /* FORCE LIGHT MODE COLORS - GLOBAL OVERRIDES */
+        :root {
+            --primary-color: #4F46E5;
+            --background-color: #f8fafc;
+            --secondary-background-color: #ffffff;
+            --text-color: #1e293b; /* Slate-800 */
+            --font: "Inter", sans-serif;
         }
         
-        /* App Background */
+        /* Force App Background & Text */
         .stApp {
-            background-color: #f3f4f6;
+            background-color: var(--background-color) !important;
+            color: var(--text-color) !important;
         }
         
-        /* Aggressively Hide Native Sidebar Navigation */
+        /* Force Text Colors to be Dark (Visible on Light BG) */
+        h1, h2, h3, h4, h5, h6, 
+        p, div, span, label, 
+        .stMarkdown, .stText {
+            color: var(--text-color) !important;
+        }
+        
+        /* -------------------------------------
+           SIDEBAR FIXES
+           ------------------------------------- */
+        /* Explicit Sidebar Background */
+        section[data-testid="stSidebar"] {
+            background-color: #ffffff !important;
+            border-right: 1px solid #e2e8f0;
+        }
+        
+        /* Hide Native Navigation (Double Sidebar Fix) */
         [data-testid="stSidebarNav"],
-        [data-testid="stSidebarNavItems"],
-        .css-1d391kg, /* Older Streamlit class */
-        .e1fqkh3o3 /* Another potential class */ {
+        [data-testid="stSidebarNavItems"] {
             display: none !important;
-            visibility: hidden !important;
             height: 0 !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
+            overflow: hidden !important;
         }
 
-        /* Ensure Sidebar Content is Visible */
+        /* Adjust Sidebar Top Padding */
         section[data-testid="stSidebar"] > div {
             padding-top: 2rem;
         }
         
+        /* Sidebar Link Styling */
+        div[data-testid="stPageLink-NavLink"] {
+            background-color: transparent;
+            border-radius: 6px;
+            margin-bottom: 4px;
+            padding: 8px 12px;
+            transition: all 0.2s;
+        }
+        
+        div[data-testid="stPageLink-NavLink"]:hover {
+            background-color: #f1f5f9 !important;
+            transform: translateX(5px);
+        }
+        
+        /* Active Link Styling */
+        div[data-testid="stPageLink-NavLink"][aria-current="page"] {
+            background-color: #e0e7ff !important; /* Indigo-50 */
+            border-left: 4px solid #4F46E5 !important;
+        }
+        
+        div[data-testid="stPageLink-NavLink"][aria-current="page"] p {
+            color: #4338ca !important; /* Indigo-700 */
+            font-weight: 600 !important;
+        }
+
+        /* -------------------------------------
+           INPUT WIDGETS FIXES
+           ------------------------------------- */
+        /* Force Input Fields to be White with Dark Text */
+        .stTextInput input, 
+        .stNumberInput input, 
+        .stSelectbox div[data-baseweb="select"] > div,
+        .stTextArea textarea {
+            color: #1e293b !important;
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+        }
+        
+        /* -------------------------------------
+           OTHER UI ELEMENTS
+           ------------------------------------- */
+        /* Metrics Cards */
+        [data-testid="stMetricValue"] {
+            color: #4F46E5 !important;
+        }
+        
+        /* Tables / Dataframes */
+        [data-testid="stDataFrame"] {
+            color: #1e293b !important;
+        }
+
         /* Mobile specific adjustments */
         @media (max-width: 768px) {
             section[data-testid="stSidebar"] > div {
                 padding-top: 1rem;
             }
-        }        background-color: transparent;
-            border-radius: 0.375rem;
-            margin-bottom: 0.25rem;
-            transition: background-color 0.2s;
-            text-decoration: none !important;
-            color: #374151 !important;
-        }
-        .stPageLink a:hover {
-            background-color: #eff6ff;
-            color: #2563eb !important;
-        }
-        
-        /* Active Sidebar Link */
-        .stPageLink[data-testid="stPageLink-NavLink"][aria-current="page"] a {
-            background-color: #eff6ff;
-            color: #2563eb !important;
-            font-weight: 600;
-            border-left: 3px solid #2563eb;
-        }
-
-        /* Sidebar Navigation Text */
-        section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
-            color: #374151 !important;
-            font-weight: 500;
-        }
-        
-        /* Headers */
-        h1, h2, h3, h4, h5, h6 {
-            font-weight: 700 !important;
-            color: #111827 !important;
-        }
-        
-        /* Metric Cards */
-        div[data-testid="stMetric"] {
-            background-color: #ffffff;
-            padding: 1rem;
-            border-radius: 0.5rem;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-            border: 1px solid #e5e7eb;
-        }
-        
-        div[data-testid="stMetricLabel"] {
-            color: #4b5563 !important; /* Darker gray for better visibility */
-            font-size: 0.875rem;
             font-weight: 600;
         }
         
