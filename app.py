@@ -121,39 +121,6 @@ try:
 except Exception as e:
     st.error(f"Error loading recent sales: {e}")
 
-st.markdown("---")
-
-# ==================== WEEKLY TREND ====================
-st.subheader("📈 7-Day Revenue Trend")
-
-try:
-    # Get last 7 days of sales
-    dates = []
-    revenues = []
-    
-    for i in range(6, -1, -1):
-        date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
-        day_sales = db.collection("sales").where("date", "==", date).stream()
-        day_revenue = sum(sale.to_dict().get("total", 0) for sale in day_sales)
-        
-        dates.append((datetime.now() - timedelta(days=i)).strftime("%b %d"))
-        revenues.append(day_revenue)
-    
-    # Create chart data
-    chart_data = pd.DataFrame({
-        "Date": dates,
-        "Revenue (₹)": revenues
-    })
-    
-    if sum(revenues) > 0:
-        st.line_chart(chart_data.set_index("Date"))
-    else:
-        st.info("📊 No sales data for the past 7 days")
-
-except Exception as e:
-    st.error(f"Error loading trend: {e}")
-
-st.markdown("---")
 
 # ==================== FOOTER ====================
 st.caption("💡 Use the sidebar to navigate between different modules")
