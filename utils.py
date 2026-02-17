@@ -141,9 +141,32 @@ def inject_custom_css():
         .stTextInput label,
         .stNumberInput label,
         .stTextArea label,
-        .stSelectbox label {
+        .stSelectbox label,
+        .stDateInput label {
             color: #374151 !important;
             font-weight: 500 !important;
+        }
+        
+        /* Date Input Specific */
+        .stDateInput input {
+            color: #000000 !important;
+            background-color: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+            -webkit-text-fill-color: #000000 !important;
+        }
+        
+        /* Date picker calendar */
+        [data-baseweb="calendar"] {
+            background-color: #ffffff !important;
+        }
+        
+        [data-baseweb="calendar"] button {
+            color: #000000 !important;
+        }
+        
+        [data-baseweb="calendar"] [aria-selected="true"] {
+            background-color: #4F46E5 !important;
+            color: #ffffff !important;
         }
         
         /* Selectbox Container */
