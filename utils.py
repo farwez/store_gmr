@@ -44,8 +44,14 @@ def inject_custom_css():
         /* Force Text Colors to be Dark (Visible on Light BG) */
         h1, h2, h3, h4, h5, h6, 
         p, div, span, label, 
-        .stMarkdown, .stText {
-            color: var(--text-color) !important;
+        .stMarkdown, .stText,
+        [data-testid="stMarkdownContainer"] {
+            color: #1e293b !important;
+        }
+        
+        /* Force visibility of all text content */
+        * {
+            -webkit-text-fill-color: initial !important;
         }
         
         /* -------------------------------------
@@ -55,6 +61,11 @@ def inject_custom_css():
         section[data-testid="stSidebar"] {
             background-color: #ffffff !important;
             border-right: 1px solid #e2e8f0;
+        }
+        
+        /* Sidebar text visibility */
+        section[data-testid="stSidebar"] * {
+            color: #1e293b !important;
         }
         
         /* Hide Native Navigation (Double Sidebar Fix) - ULTRA AGGRESSIVE */
@@ -108,20 +119,43 @@ def inject_custom_css():
         /* -------------------------------------
            INPUT WIDGETS FIXES
            ------------------------------------- */
-        /* Force Input Fields to be White with Dark Text */
+        /* Force Input Fields to be White with DARK TEXT */
         .stTextInput input, 
         .stNumberInput input, 
         .stTextArea textarea {
-            color: #1e293b !important;
+            color: #000000 !important;
             background-color: #ffffff !important;
-            border-color: #cbd5e1 !important;
+            border: 1px solid #cbd5e1 !important;
+            -webkit-text-fill-color: #000000 !important;
+        }
+        
+        /* Input placeholder text */
+        .stTextInput input::placeholder,
+        .stNumberInput input::placeholder,
+        .stTextArea textarea::placeholder {
+            color: #9ca3af !important;
+            opacity: 1 !important;
+        }
+        
+        /* Input labels */
+        .stTextInput label,
+        .stNumberInput label,
+        .stTextArea label,
+        .stSelectbox label {
+            color: #374151 !important;
+            font-weight: 500 !important;
         }
         
         /* Selectbox Container */
         .stSelectbox div[data-baseweb="select"] > div {
-            color: #1e293b !important;
+            color: #000000 !important;
             background-color: #ffffff !important;
-            border-color: #cbd5e1 !important;
+            border: 1px solid #cbd5e1 !important;
+        }
+        
+        /* Selectbox selected value text */
+        .stSelectbox div[data-baseweb="select"] span {
+            color: #000000 !important;
         }
         
         /* Selectbox Dropdown Menu */
@@ -131,7 +165,7 @@ def inject_custom_css():
         
         /* Selectbox Options/Items in Dropdown */
         ul[role="listbox"] li {
-            color: #1e293b !important;
+            color: #000000 !important;
             background-color: #ffffff !important;
         }
         
@@ -329,7 +363,7 @@ def render_sidebar():
                 clear_items_cache()
                 st.rerun()
                 
-            st.caption(f"v1.2.0 • {datetime.now().strftime('%d-%b')}")
+            st.caption(f"v1.2.0 • {get_ist_time().strftime('%d-%b')}")
             
     except Exception as e:
         st.error(f"Sidebar Error: {e}")
@@ -405,7 +439,7 @@ def generate_bill_pdf(filename, items, subtotal, discount_amount, discount_type,
         info_data = [
             [
                 Paragraph(f"<b>Bill To:</b><br/>{customer_name}<br/>Phone: {customer_phone if customer_phone else 'N/A'}", info_style),
-                Paragraph(f"<b>Ref No:</b> {datetime.now().strftime('%Y%m%d%H%M%S')}<br/><b>Date:</b> {datetime.now().strftime('%d-%m-%Y')}<br/><b>Time:</b> {datetime.now().strftime('%I:%M %p')}{payment_info}", info_style)
+                Paragraph(f"<b>Ref No:</b> {get_ist_time().strftime('%Y%m%d%H%M%S')}<br/><b>Date:</b> {get_ist_time().strftime('%d-%m-%Y')}<br/><b>Time:</b> {get_ist_time().strftime('%I:%M %p')}{payment_info}", info_style)
             ]
         ]
         info_table = Table(info_data, colWidths=[3.5*inch, 3*inch])
@@ -522,7 +556,7 @@ def build_whatsapp_message(items, subtotal, discount_amount, discount_type, tota
         message += f"👤 *{customer_name}*\n"
         
     from datetime import datetime
-    message += f"📅 {datetime.now().strftime('%d-%b-%Y')} | ⏰ {datetime.now().strftime('%I:%M %p')}\n"
+    message += f"📅 {get_ist_time().strftime('%d-%b-%Y')} | ⏰ {get_ist_time().strftime('%I:%M %p')}\n"
     message += "──────────────────────\n"
     
     # Items List (Clean)
@@ -570,8 +604,8 @@ def generate_bill_html(items, subtotal, discount_amount, discount_type, total, c
                 <p style="margin: 0; color: #666; font-size: 14px;">Phone: {customer_phone if customer_phone else 'N/A'}</p>
             </div>
             <div style="width: 48%; text-align: right;">
-                <p style="margin: 2px 0; font-size: 14px;"><b>Date:</b> {datetime.now().strftime('%d-%m-%Y')}</p>
-                <p style="margin: 2px 0; font-size: 14px;"><b>Time:</b> {datetime.now().strftime('%I:%M %p')}</p>
+                <p style="margin: 2px 0; font-size: 14px;"><b>Date:</b> {get_ist_time().strftime('%d-%m-%Y')}</p>
+                <p style="margin: 2px 0; font-size: 14px;"><b>Time:</b> {get_ist_time().strftime('%I:%M %p')}</p>
                 <p style="margin: 2px 0; font-size: 14px;"><b>Payment:</b> {payment_method if payment_method else 'Not Specified'}</p>
             </div>
         </div>
