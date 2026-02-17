@@ -24,15 +24,29 @@ def inject_custom_css():
             background-color: #f3f4f6;
         }
         
-        /* Hide Native Sidebar Navigation (Fallback) */
-    [data-testid="stSidebarNav"] {
-        display: none !important;
-    }
-    
-    /* Style the Sidebar Header */
-    section[data-testid="stSidebar"] > div > div:first-child {
-        padding-top: 2rem;
-    }        background-color: transparent;
+        /* Aggressively Hide Native Sidebar Navigation */
+        [data-testid="stSidebarNav"],
+        [data-testid="stSidebarNavItems"],
+        .css-1d391kg, /* Older Streamlit class */
+        .e1fqkh3o3 /* Another potential class */ {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
+        /* Ensure Sidebar Content is Visible */
+        section[data-testid="stSidebar"] > div {
+            padding-top: 2rem;
+        }
+        
+        /* Mobile specific adjustments */
+        @media (max-width: 768px) {
+            section[data-testid="stSidebar"] > div {
+                padding-top: 1rem;
+            }
+        }        background-color: transparent;
             border-radius: 0.375rem;
             margin-bottom: 0.25rem;
             transition: background-color 0.2s;
