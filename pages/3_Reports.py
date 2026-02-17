@@ -3,11 +3,13 @@ from firebase_config import db
 import pandas as pd
 from datetime import datetime, timedelta
 import io
-from utils import inject_custom_css, render_sidebar
+from utils import inject_custom_css, render_sidebar, get_ist_time
 
 inject_custom_css()
 render_sidebar()
+
 st.title("📊 Sales Reports & Analytics")
+st.markdown("---")
 
 # Create tabs for different report types
 tab1, tab2, tab3 = st.tabs(["📅 Date Range Reports", "🏆 Top Sellers", "👥 Customer Reports"])
@@ -15,20 +17,45 @@ tab1, tab2, tab3 = st.tabs(["📅 Date Range Reports", "🏆 Top Sellers", "👥
 # ==================== TAB 1: DATE RANGE REPORTS ====================
 with tab1:
     st.subheader("📅 Sales by Date Range")
+    st.markdown("Select a date range to view detailed sales reports")
     
-    col1, col2 = st.columns(2)
+    # Date inputs with better styling
+    col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
-        start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=7))
+        start_date = st.date_input(
+            "📅 Start Date", 
+            value=(get_ist_time() - timedelta(days=7)).date(),
+            help="Select the starting date for the report"
+        )
     with col2:
-        end_date = st.date_input("End Date", value=datetime.now())
+        end_date = st.date_input(
+            "📅 End Date", 
+            value=get_ist_time().date(),
+            help="Select the ending date for the report"
+        )
+    with col3:
+        st.write("")  # Spacer
+        st.write("")  # Spacer
+    
+    st.markdown("---")
     
     # Search/Filter options
-    st.write("**Filters:**")
+    st.markdown("#### 🔍 Filters")
     col_filter1, col_filter2 = st.columns(2)
     with col_filter1:
-        customer_search = st.text_input("🔍 Search by Customer Name", placeholder="Type customer name...")
+        customer_search = st.text_input(
+            "Customer Name", 
+            placeholder="Type customer name...",
+            help="Filter by customer name"
+        )
     with col_filter2:
-        min_amount = st.number_input("Minimum Amount (₹)", min_value=0.0, value=0.0, step=100.0)
+        min_amount = st.number_input(
+            "Minimum Amount (₹)", 
+            min_value=0.0, 
+            value=0.0, 
+            step=100.0,
+            help="Show only sales above this amount"
+        )
     
     if st.button("📊 Generate Report", type="primary"):
         try:
@@ -125,13 +152,24 @@ with tab1:
 # ==================== TAB 2: TOP SELLERS ====================
 with tab2:
     st.subheader("🏆 Best Selling Products")
+    st.markdown("Analyze which products generate the most revenue")
     
     # Date range for top sellers
     col1, col2 = st.columns(2)
     with col1:
-        top_start_date = st.date_input("From Date", value=datetime.now() - timedelta(days=30), key="top_start")
+        top_start_date = st.date_input(
+            "📅 From Date", 
+            value=(get_ist_time() - timedelta(days=30)).date(), 
+            key="top_start",
+            help="Start date for analysis"
+        )
     with col2:
-        top_end_date = st.date_input("To Date", value=datetime.now(), key="top_end")
+        top_end_date = st.date_input(
+            "📅 To Date", 
+            value=get_ist_time().date(), 
+            key="top_end",
+            help="End date for analysis"
+        )
     
     if st.button("🔍 Analyze Top Sellers", type="primary"):
         try:
@@ -206,13 +244,24 @@ with tab2:
 # ==================== TAB 3: CUSTOMER REPORTS ====================
 with tab3:
     st.subheader("👥 Customer Analysis")
+    st.markdown("Identify your most valuable customers")
     
     # Date range for customers
     col1, col2 = st.columns(2)
     with col1:
-        cust_start_date = st.date_input("From Date", value=datetime.now() - timedelta(days=30), key="cust_start")
+        cust_start_date = st.date_input(
+            "📅 From Date", 
+            value=(get_ist_time() - timedelta(days=30)).date(), 
+            key="cust_start",
+            help="Start date for customer analysis"
+        )
     with col2:
-        cust_end_date = st.date_input("To Date", value=datetime.now(), key="cust_end")
+        cust_end_date = st.date_input(
+            "📅 To Date", 
+            value=get_ist_time().date(), 
+            key="cust_end",
+            help="End date for customer analysis"
+        )
     
     if st.button("👥 Analyze Customers", type="primary"):
         try:
