@@ -228,6 +228,52 @@ def inject_custom_css():
         }
         
     </style>
+    
+    <script>
+        // Remove native navigation IMMEDIATELY (prevents flash/glitch)
+        (function() {
+            const hideNav = () => {
+                // Target all possible navigation elements
+                const selectors = [
+                    '[data-testid="stSidebarNav"]',
+                    '[data-testid="stSidebarNavItems"]',
+                    '[data-testid="stSidebarNavLink"]',
+                    'section[data-testid="stSidebar"] nav',
+                    'section[data-testid="stSidebar"] ul[role="navigation"]',
+                    '.css-1544g2n',
+                    '.css-17lntkn'
+                ];
+                
+                selectors.forEach(selector => {
+                    const elements = document.querySelectorAll(selector);
+                    elements.forEach(el => {
+                        if (el) {
+                            el.style.display = 'none';
+                            el.style.visibility = 'hidden';
+                            el.style.height = '0';
+                            el.style.overflow = 'hidden';
+                            el.remove(); // Actually remove from DOM
+                        }
+                    });
+                });
+            };
+            
+            // Run immediately
+            hideNav();
+            
+            // Run again after DOM loads
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', hideNav);
+            }
+            
+            // Run periodically to catch late-rendered elements
+            const observer = new MutationObserver(hideNav);
+            observer.observe(document.body, { childList: true, subtree: true });
+            
+            // Stop observing after 3 seconds (navigation should be loaded by then)
+            setTimeout(() => observer.disconnect(), 3000);
+        })();
+    </script>
     """, unsafe_allow_html=True)
 
 # --- CACHED DATA OPERATIONS ---
