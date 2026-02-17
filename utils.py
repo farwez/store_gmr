@@ -24,15 +24,15 @@ def inject_custom_css():
             background-color: #f3f4f6;
         }
         
-        /* Sidebar Styling */
-        section[data-testid="stSidebar"] {
-            background-color: #ffffff;
-            border-right: 1px solid #e5e7eb;
-        }
-        
-        /* Sidebar Link Styling */
-        .stPageLink a {
-            background-color: transparent;
+        /* Hide Native Sidebar Navigation (Fallback) */
+    [data-testid="stSidebarNav"] {
+        display: none !important;
+    }
+    
+    /* Style the Sidebar Header */
+    section[data-testid="stSidebar"] > div > div:first-child {
+        padding-top: 2rem;
+    }        background-color: transparent;
             border-radius: 0.375rem;
             margin-bottom: 0.25rem;
             transition: background-color 0.2s;
