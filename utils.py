@@ -26,309 +26,169 @@ def today_string():
 def inject_custom_css():
     st.markdown("""
     <style>
-        /* FORCE LIGHT MODE COLORS - GLOBAL OVERRIDES */
+        /* 1. GLOBAL LIGHT THEME ENFORCEMENT */
         :root {
-            --primary-color: #4F46E5;
-            --background-color: #f8fafc;
-            --secondary-background-color: #ffffff;
-            --text-color: #1e293b; /* Slate-800 */
-            --font: "Inter", sans-serif;
+            --primary: #4F46E5;
+            --background: #f8fafc;
+            --text: #1e293b;
+            --secondary: #ffffff;
         }
         
-        /* Force App Background & Text */
-        .stApp {
-            background-color: var(--background-color) !important;
-            color: var(--text-color) !important;
+        .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
+            background-color: #f8fafc !important;
         }
         
-        /* Force Text Colors to be Dark (Visible on Light BG) */
-        h1, h2, h3, h4, h5, h6, 
-        p, div, span, label, 
-        .stMarkdown, .stText,
-        [data-testid="stMarkdownContainer"] {
+        /* Force text colors to be dark (slate-800) */
+        h1, h2, h3, h4, h5, h6, p, label, span, div, li {
             color: #1e293b !important;
         }
         
-        /* Force visibility of all text content */
-        * {
-            -webkit-text-fill-color: initial !important;
+        /* Overaggressive text override for complex widgets */
+        [data-testid="stMarkdownContainer"] p, 
+        [data-testid="stWidgetLabel"] p,
+        .stSelectbox div, .stTextInput div, .stNumberInput div {
+            color: #1e293b !important;
         }
-        
-        /* -------------------------------------
-           SIDEBAR FIXES
-           ------------------------------------- */
-        /* Explicit Sidebar Background */
+
+        /* 2. SIDEBAR STYLING */
         section[data-testid="stSidebar"] {
             background-color: #ffffff !important;
             border-right: 1px solid #e2e8f0;
         }
         
-        /* Sidebar text visibility */
         section[data-testid="stSidebar"] * {
             color: #1e293b !important;
         }
         
-        /* Hide Native Navigation (Double Sidebar Fix) - ULTRA AGGRESSIVE */
-        [data-testid="stSidebarNav"],
-        [data-testid="stSidebarNavItems"],
-        [data-testid="stSidebarNavLink"],
-        section[data-testid="stSidebar"] nav,
-        section[data-testid="stSidebar"] ul[role="navigation"],
-        .css-1544g2n,
-        .css-17lntkn,
-        div[class*="stSidebarNav"] {
+        /* Hide native nav */
+        [data-testid="stSidebarNav"] {
             display: none !important;
-            visibility: hidden !important;
-            height: 0 !important;
-            width: 0 !important;
-            overflow: hidden !important;
-            position: absolute !important;
-            left: -9999px !important;
-        }
-
-        /* Adjust Sidebar Top Padding */
-        section[data-testid="stSidebar"] > div {
-            padding-top: 2rem;
         }
         
-        /* Sidebar Link Styling */
+        /* Custom Nav Link Styling - restoring premium feel */
         div[data-testid="stPageLink-NavLink"] {
             background-color: transparent;
-            border-radius: 6px;
+            border-radius: 8px;
             margin-bottom: 4px;
             padding: 8px 12px;
-            transition: all 0.2s;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
         div[data-testid="stPageLink-NavLink"]:hover {
             background-color: #f1f5f9 !important;
-            transform: translateX(5px);
+            transform: translateX(4px);
         }
         
-        /* Active Link Styling */
         div[data-testid="stPageLink-NavLink"][aria-current="page"] {
-            background-color: #e0e7ff !important; /* Indigo-50 */
+            background-color: #e0e7ff !important;
             border-left: 4px solid #4F46E5 !important;
         }
         
         div[data-testid="stPageLink-NavLink"][aria-current="page"] p {
-            color: #4338ca !important; /* Indigo-700 */
+            color: #4338ca !important;
             font-weight: 600 !important;
         }
 
-        /* -------------------------------------
-           INPUT WIDGETS FIXES
-           ------------------------------------- */
-        /* Force Input Fields to be White with DARK TEXT */
-        .stTextInput input, 
-        .stNumberInput input, 
-        .stTextArea textarea {
-            color: #000000 !important;
+        /* 3. INPUT WIDGETS (Inputs, Selects, etc) */
+        .stTextInput input, .stNumberInput input, .stTextArea textarea, .stDateInput input {
             background-color: #ffffff !important;
+            color: #000000 !important;
             border: 1px solid #cbd5e1 !important;
-            -webkit-text-fill-color: #000000 !important;
+            border-radius: 8px !important;
         }
         
-        /* Input placeholder text */
-        .stTextInput input::placeholder,
-        .stNumberInput input::placeholder,
-        .stTextArea textarea::placeholder {
-            color: #9ca3af !important;
-            opacity: 1 !important;
-        }
-        
-        /* Input labels */
-        .stTextInput label,
-        .stNumberInput label,
-        .stTextArea label,
-        .stSelectbox label,
-        .stDateInput label {
-            color: #374151 !important;
-            font-weight: 500 !important;
-        }
-        
-        /* Date Input Specific */
-        .stDateInput input {
+        /* SELECTBOX & DROPDOWN - CRITICAL FIX */
+        /* The select box itself (closed) */
+        div[data-baseweb="select"] > div {
+            background-color: #ffffff !important;
             color: #000000 !important;
-            background-color: #ffffff !important;
-            border: 1px solid #cbd5e1 !important;
-            -webkit-text-fill-color: #000000 !important;
+            border-radius: 8px !important;
         }
         
-        /* Date picker calendar */
-        [data-baseweb="calendar"] {
-            background-color: #ffffff !important;
-        }
-        
-        [data-baseweb="calendar"] button {
+        /* The persistent selected item text */
+        div[data-baseweb="select"] [v-data-testid="stSelectbox"] span,
+        div[data-baseweb="select"] span {
             color: #000000 !important;
         }
-        
-        [data-baseweb="calendar"] [aria-selected="true"] {
-            background-color: #4F46E5 !important;
-            color: #ffffff !important;
-        }
-        
-        /* Selectbox Container */
-        .stSelectbox div[data-baseweb="select"] > div {
-            color: #000000 !important;
+
+        /* THE DROPDOWN LIST (OPENED) */
+        /* This is usually in a portal at the body level */
+        div[data-baseweb="popover"], 
+        div[role="listbox"],
+        div[data-baseweb="menu"],
+        ul[role="listbox"] {
             background-color: #ffffff !important;
-            border: 1px solid #cbd5e1 !important;
+            color: #1e293b !important;
+            border: 1px solid #e2e8f0 !important;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+            border-radius: 8px !important;
         }
-        
-        /* Selectbox selected value text */
-        .stSelectbox div[data-baseweb="select"] span {
-            color: #000000 !important;
-        }
-        
-        /* Selectbox Dropdown Menu */
-        div[data-baseweb="popover"] {
+
+        /* Items in the list */
+        li[role="option"], 
+        [role="listbox"] li,
+        [data-baseweb="popover"] li {
             background-color: #ffffff !important;
+            color: #1e293b !important;
+            padding: 10px 15px !important;
+            margin: 2px 5px !important;
+            border-radius: 6px !important;
         }
-        
-        /* Selectbox Options/Items in Dropdown */
-        ul[role="listbox"] li {
-            color: #000000 !important;
-            background-color: #ffffff !important;
-        }
-        
-        /* Selectbox Hover State */
-        ul[role="listbox"] li:hover {
+
+        /* Hover & Active States in List */
+        li[role="option"]:hover,
+        [role="listbox"] li:hover,
+        [data-baseweb="popover"] li:hover {
             background-color: #f1f5f9 !important;
             color: #4F46E5 !important;
         }
-        
-        /* Selected Option */
-        ul[role="listbox"] li[aria-selected="true"] {
-            background-color: #e0e7ff !important;
-            color: #4338ca !important;
+
+        /* 4. METRICS & CARDS */
+        [data-testid="stMetric"] {
+            background-color: white !important;
+            padding: 20px !important;
+            border-radius: 12px !important;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+            border: 1px solid #f1f5f9 !important;
         }
         
-        /* -------------------------------------
-           OTHER UI ELEMENTS
-           ------------------------------------- */
-        /* Metrics Cards */
         [data-testid="stMetricValue"] {
             color: #4F46E5 !important;
+            font-weight: 700 !important;
         }
         
-        /* Tables / Dataframes */
-        [data-testid="stDataFrame"] {
+        /* 5. BUTTONS */
+        button[kind="primary"] {
+            background-color: #4f46e5 !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2) !important;
+        }
+        
+        button[kind="secondary"] {
+            background-color: white !important;
             color: #1e293b !important;
+            border: 1px solid #d1d5db !important;
+            border-radius: 8px !important;
         }
 
-        /* Mobile specific adjustments */
-        @media (max-width: 768px) {
-            section[data-testid="stSidebar"] > div {
-                padding-top: 1rem;
-            }
-            font-weight: 600;
-        }
-        
-        div[data-testid="stMetricValue"] {
-            color: #111827 !important;
-            font-size: 1.5rem;
-            font-weight: 700;
-        }
-        
-        /* Buttons - Primary */
-        button[kind="primary"] {
-            background-color: #4f46e5;
-            color: white !important;
-            border-radius: 0.375rem;
-            border: none;
-            padding: 0.5rem 1rem;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        button[kind="primary"]:hover {
-            background-color: #4338ca;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        }
-        
-        /* Buttons - Secondary */
-        button[kind="secondary"] {
-            background-color: #ffffff;
-            color: #1f2937 !important; /* Force dark text */
-            border: 1px solid #d1d5db;
-            border-radius: 0.375rem;
-            transition: all 0.2s;
-        }
-        button[kind="secondary"]:hover {
-            border-color: #4f46e5;
-            color: #4f46e5 !important;
-            background-color: #fdfbff;
-        }
-        
-        /* Input Fields */
-        div[data-baseweb="input"] {
-            background-color: #ffffff;
-            border-radius: 0.375rem;
-            border: 1px solid #d1d5db;
-        }
-        
-        /* Dataframes */
-        div[data-testid="stDataFrame"] {
-            background-color: #ffffff;
-            border-radius: 0.5rem;
-            padding: 0.5rem;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-            border: 1px solid #e5e7eb;
-        }
-        
-        /* Success/Error/Warning/Info Messages */
-        div.stAlert {
-            background-color: #ffffff;
-            border-radius: 0.5rem;
-            border: none;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+        /* Clean up some native Streamlit spacing */
+        .main .block-container {
+            padding-top: 3rem !important;
         }
         
     </style>
     
     <script>
-        // Remove native navigation IMMEDIATELY (prevents flash/glitch)
+        // Smoothly hide native navigation
         (function() {
-            const hideNav = () => {
-                // Target all possible navigation elements
-                const selectors = [
-                    '[data-testid="stSidebarNav"]',
-                    '[data-testid="stSidebarNavItems"]',
-                    '[data-testid="stSidebarNavLink"]',
-                    'section[data-testid="stSidebar"] nav',
-                    'section[data-testid="stSidebar"] ul[role="navigation"]',
-                    '.css-1544g2n',
-                    '.css-17lntkn'
-                ];
-                
-                selectors.forEach(selector => {
-                    const elements = document.querySelectorAll(selector);
-                    elements.forEach(el => {
-                        if (el) {
-                            el.style.display = 'none';
-                            el.style.visibility = 'hidden';
-                            el.style.height = '0';
-                            el.style.overflow = 'hidden';
-                            el.remove(); // Actually remove from DOM
-                        }
-                    });
-                });
+            const hide = () => {
+                const nav = document.querySelector('[data-testid="stSidebarNav"]');
+                if (nav) nav.style.display = 'none';
             };
-            
-            // Run immediately
-            hideNav();
-            
-            // Run again after DOM loads
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', hideNav);
-            }
-            
-            // Run periodically to catch late-rendered elements
-            const observer = new MutationObserver(hideNav);
-            observer.observe(document.body, { childList: true, subtree: true });
-            
-            // Stop observing after 3 seconds (navigation should be loaded by then)
-            setTimeout(() => observer.disconnect(), 3000);
+            hide();
+            new MutationObserver(hide).observe(document.body, {childList:true, subtree:true});
         })();
     </script>
     """, unsafe_allow_html=True)
