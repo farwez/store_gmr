@@ -111,6 +111,31 @@ def inject_custom_css():
             color: #000000 !important;
         }
 
+        /* CALENDAR / DATE PICKER FIX */
+        [data-baseweb="calendar"], 
+        [data-baseweb="calendar"] * {
+            background-color: #ffffff !important;
+            color: #1e293b !important;
+        }
+
+        /* Calendar individual day cells */
+        [data-baseweb="calendar"] [role="gridcell"] {
+            background-color: #ffffff !important;
+            color: #1e293b !important;
+        }
+
+        /* Calendar Selected date */
+        [data-baseweb="calendar"] [aria-selected="true"] {
+            background-color: #4F46E5 !important;
+            color: #ffffff !important;
+        }
+
+        /* Calendar Hovered date */
+        [data-baseweb="calendar"] [role="gridcell"]:hover {
+            background-color: #f1f5f9 !important;
+            color: #4F46E5 !important;
+        }
+
         /* THE DROPDOWN LIST (OPENED) */
         /* This is usually in a portal at the body level */
         div[data-baseweb="popover"], 
