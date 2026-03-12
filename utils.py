@@ -123,6 +123,11 @@ def inject_custom_css():
             background-color: var(--bg-main) !important;
             font-family: 'Inter', sans-serif !important;
         }
+        
+        /* Add top spacing for the new FAB button */
+        [data-testid="stAppViewContainer"] {
+            padding-top: 50px !important;
+        }
 
         /* ------------------------------------- */
         /* ENHANCED TEXT VISIBILITY (DESKTOP)    */
@@ -143,7 +148,7 @@ def inject_custom_css():
         /* MOBILE RESPONSIVE ADJUSTMENTS         */
         /* ------------------------------------- */
         @media (max-width: 768px) {
-            .stMain { padding: 0.5rem !important; }
+            .stMain { padding: 0.5rem !important; padding-top: 40px !important; }
             [data-testid="stMetric"] { padding: 15px !important; }
             h1 { font-size: 24px !important; }
             h2 { font-size: 20px !important; }
@@ -206,70 +211,60 @@ def inject_custom_css():
         /* SIDEBAR TOGGLE BUTTONS — ALWAYS FULLY VISIBLE     */
         /* ================================================ */
 
-        /* When sidebar is OPEN — button lives inside dark sidebar, make it white */
-        [data-testid="stSidebarCollapseButton"],
-        [data-testid="stSidebarCollapseButton"] > button {
-            visibility: visible !important;
-            opacity: 1 !important;
-            background: rgba(255,255,255,0.15) !important;
-            border: 1px solid rgba(255,255,255,0.3) !important;
-            border-radius: 10px !important;
+        /* When sidebar is OPEN — button lives inside dark sidebar */
+        [data-testid="stSidebarCollapseButton"] {
+            background: rgba(255,255,255,0.1) !important;
+            border: 1px solid rgba(255,255,255,0.2) !important;
+            border-radius: 50% !important;
+            margin-top: 10px !important;
+            margin-left: 10px !important;
+            width: 40px !important;
+            height: 40px !important;
         }
-        [data-testid="stSidebarCollapseButton"] svg,
-        [data-testid="stSidebarCollapseButton"] > button svg {
+        [data-testid="stSidebarCollapseButton"] svg {
             fill: #ffffff !important;
             color: #ffffff !important;
         }
 
-        /* When sidebar is CLOSED — button sits on WHITE page, MUST be vivid */
-        /* Target every possible variant Streamlit uses */
-        [data-testid="collapsedControl"],
-        [data-testid="collapsedControl"] > button,
-        button[data-testid="collapsedControl"] {
-            visibility: visible !important;
-            opacity: 1 !important;
+        /* When sidebar is CLOSED — Dark Floating Button for Mobile/Laptop */
+        [data-testid="collapsedControl"] {
+            background: #0f172a !important; /* Deep Navy Black */
+            border-radius: 50% !important;  /* Circular FAB style */
+            border: 2px solid #334155 !important;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3) !important;
+            width: 50px !important;
+            height: 50px !important;
+            position: fixed !important;
+            top: 15px !important;
+            left: 15px !important;
+            z-index: 10000000 !important; /* Extremely high to stay above banner */
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            background: #4f46e5 !important;
-            border: 2px solid #6366f1 !important;
-            border-radius: 12px !important;
-            width: 50px !important;
-            height: 50px !important;
-            min-width: 50px !important;
-            min-height: 50px !important;
             cursor: pointer !important;
-            box-shadow: 0 4px 20px rgba(79,70,229,0.65) !important;
-            position: fixed !important;
-            top: 8px !important;
-            left: 8px !important;
-            z-index: 2147483647 !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
         }
-        [data-testid="collapsedControl"]:hover,
-        [data-testid="collapsedControl"] > button:hover {
-            background: #7c3aed !important;
-            box-shadow: 0 6px 24px rgba(124,58,237,0.7) !important;
-            transform: scale(1.08) !important;
+        [data-testid="collapsedControl"]:hover {
+            background: #1e293b !important;
+            transform: scale(1.1) rotate(5deg) !important;
         }
-        [data-testid="collapsedControl"] svg,
-        [data-testid="collapsedControl"] > button svg,
-        button[data-testid="collapsedControl"] svg {
+        [data-testid="collapsedControl"] svg {
             fill: #ffffff !important;
             color: #ffffff !important;
-            width: 22px !important;
-            height: 22px !important;
+            width: 30px !important;
+            height: 30px !important;
         }
 
-        /* Mobile specific — make even larger for touch */
+        /* Mobile specific — ensure it's not cut off by status bar */
         @media (max-width: 768px) {
-            [data-testid="collapsedControl"],
-            [data-testid="collapsedControl"] > button {
-                width: 56px !important;
-                height: 56px !important;
-                top: 6px !important;
-                left: 6px !important;
-                font-size: 26px !important;
-                box-shadow: 0 6px 24px rgba(79,70,229,0.8) !important;
+            .main { padding-top: 80px !important; }
+            [data-testid="collapsedControl"] {
+                width: 54px !important;
+                height: 54px !important;
+                top: 15px !important;
+                left: 15px !important;
             }
         }
 
