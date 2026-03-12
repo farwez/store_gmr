@@ -310,6 +310,11 @@ def inject_custom_css():
         #MainMenu {visibility: visible;}
         footer {visibility: hidden;}
         
+        /* Forcely hide native sidebar to prevent delay/interference */
+        [data-testid="stSidebarNav"] {
+            display: none !important;
+        }
+        
         [data-testid="stHeader"] {
             background: rgba(255, 255, 255, 0.8) !important;
             backdrop-filter: blur(8px) !important;
