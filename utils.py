@@ -176,6 +176,25 @@ def inject_custom_css():
             border-right: 1px solid var(--border-color) !important;
             box-shadow: 4px 0 24px rgba(0,0,0,0.02) !important;
         }
+        
+        /* SIDEBAR ARROW & COLLAPSE BUTTON VISIBILITY */
+        [data-testid="stSidebarCollapseButton"] svg, 
+        [data-testid="collapsedControl"] svg {
+            color: var(--text-main) !important;
+            fill: var(--text-main) !important;
+        }
+        [data-testid="stSidebarCollapseButton"], 
+        [data-testid="collapsedControl"] {
+            background-color: #f1f5f9 !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 8px !important;
+            transition: all 0.2s;
+        }
+        [data-testid="stSidebarCollapseButton"]:hover, 
+        [data-testid="collapsedControl"]:hover {
+            background-color: #e2e8f0 !important;
+            transform: scale(1.05);
+        }
 
         /* Hide native navigation list but keep sidebar functionality */
         section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {
