@@ -169,61 +169,121 @@ def inject_custom_css():
             font-weight: 700 !important;
         }
 
-        /* 2. SIDEBAR - CLEAN & MINIMAL */
-        /* 2. SIDEBAR - CLEAN & MINIMAL */
+        /* ============================================ */
+        /*   2. SIDEBAR — PREMIUM DARK DESIGN           */
+        /* ============================================ */
         [data-testid="stSidebar"] {
-            background-color: var(--sidebar-bg) !important;
-            border-right: 1px solid var(--border-color) !important;
-            box-shadow: 4px 0 24px rgba(0,0,0,0.02) !important;
+            background: linear-gradient(160deg, #0f172a 0%, #1e293b 100%) !important;
+            border-right: none !important;
+            box-shadow: 4px 0 30px rgba(0,0,0,0.15) !important;
         }
         
-        /* SIDEBAR ARROW & COLLAPSE BUTTON VISIBILITY */
-        [data-testid="stSidebarCollapseButton"] svg, 
-        [data-testid="collapsedControl"] svg {
-            color: var(--text-main) !important;
-            fill: var(--text-main) !important;
+        /* All text inside sidebar white */
+        [data-testid="stSidebar"] p,
+        [data-testid="stSidebar"] span,
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] h1,
+        [data-testid="stSidebar"] h2,
+        [data-testid="stSidebar"] h3,
+        [data-testid="stSidebar"] h4,
+        [data-testid="stSidebar"] h5,
+        [data-testid="stSidebar"] small,
+        [data-testid="stSidebar"] .stMarkdown p {
+            color: #e2e8f0 !important;
         }
-        [data-testid="stSidebarCollapseButton"], 
-        [data-testid="collapsedControl"] {
-            background-color: #f1f5f9 !important;
-            border: 1px solid #cbd5e1 !important;
-            border-radius: 8px !important;
-            transition: all 0.2s;
-        }
-        [data-testid="stSidebarCollapseButton"]:hover, 
-        [data-testid="collapsedControl"]:hover {
-            background-color: #e2e8f0 !important;
-            transform: scale(1.05);
+        
+        /* Section headers like 'Operations' */
+        [data-testid="stSidebar"] h6 {
+            color: #94a3b8 !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            letter-spacing: 1.5px !important;
+            text-transform: uppercase !important;
+            padding: 16px 16px 4px 16px !important;
         }
 
-        /* Hide native navigation list but keep sidebar functionality */
+        /* COLLAPSE/EXPAND ARROW — now fully visible */
+        [data-testid="stSidebarCollapseButton"],
+        [data-testid="collapsedControl"] {
+            background: #334155 !important;
+            border: 2px solid #475569 !important;
+            border-radius: 10px !important;
+            width: 36px !important;
+            height: 36px !important;
+            transition: all 0.2s ease !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        [data-testid="stSidebarCollapseButton"]:hover,
+        [data-testid="collapsedControl"]:hover {
+            background: #4f46e5 !important;
+            border-color: #6366f1 !important;
+            transform: scale(1.08) !important;
+        }
+        [data-testid="stSidebarCollapseButton"] svg,
+        [data-testid="collapsedControl"] svg {
+            fill: #ffffff !important;
+            color: #ffffff !important;
+            width: 18px !important;
+            height: 18px !important;
+        }
+
+        /* Hide native navigation list */
         section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {
             display: none !important;
         }
 
-        /* Custom Page Links in Sidebar */
+        /* Nav links — normal state */
         div[data-testid="stPageLink-NavLink"] {
-            padding: 12px 16px !important;
-            border-radius: 12px !important;
-            margin: 4px 12px !important;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            padding: 11px 16px !important;
+            border-radius: 10px !important;
+            margin: 2px 10px !important;
+            transition: all 0.2s ease !important;
             border: 1px solid transparent !important;
         }
+        div[data-testid="stPageLink-NavLink"] p {
+            color: #cbd5e1 !important;
+            font-size: 14px !important;
+            font-weight: 500 !important;
+        }
 
+        /* Nav links — hover */
         div[data-testid="stPageLink-NavLink"]:hover {
-            background: #f8fafc !important;
-            border: 1px solid #f1f5f9 !important;
-            transform: translateX(4px);
+            background: rgba(255,255,255,0.07) !important;
+            border-color: rgba(255,255,255,0.1) !important;
+        }
+        div[data-testid="stPageLink-NavLink"]:hover p {
+            color: #ffffff !important;
         }
 
+        /* Nav links — ACTIVE page */
         div[data-testid="stPageLink-NavLink"][aria-current="page"] {
-            background: var(--brand-gradient) !important;
-            box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3) !important;
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%) !important;
+            box-shadow: 0 4px 15px rgba(99,102,241,0.4) !important;
+            border-color: transparent !important;
         }
-
         div[data-testid="stPageLink-NavLink"][aria-current="page"] p {
-            color: white !important;
-            font-weight: 600 !important;
+            color: #ffffff !important;
+            font-weight: 700 !important;
+        }
+        
+        /* Dividers inside sidebar */
+        [data-testid="stSidebar"] hr {
+            border-color: #334155 !important;
+        }
+        
+        /* Sidebar buttons (Refresh / Logout) */
+        [data-testid="stSidebar"] button {
+            background: #1e293b !important;
+            border: 1px solid #334155 !important;
+            color: #e2e8f0 !important;
+            border-radius: 10px !important;
+        }
+        [data-testid="stSidebar"] button:hover {
+            background: #334155 !important;
+            border-color: #475569 !important;
+            color: #ffffff !important;
         }
 
         /* 5. INPUTS - CLEAN WHITE */
