@@ -445,64 +445,81 @@ def inject_custom_css():
     <script>
         (function() {
             function applyAll() {
-                try {
-                    // We use window.parent to cross the iframe boundary into the Streamlit shell
-                    const P = window.parent.document;
+                // On desktop: Streamlit app runs inside an iframe, so use window.parent
+                // On mobile: the app may run directly, so window.parent === window
+                // We try BOTH documents to cover both cases reliably
+                const docs = [];
+                try { if (window.parent && window.parent.document !== document) docs.push(window.parent.document); } catch(e) {}
+                docs.push(document);
 
-                    // 1. Hide native nav auto-links
-                    const nav = P.querySelector('[data-testid="stSidebarNav"]');
-                    if (nav) nav.style.display = 'none';
+                docs.forEach(function(P) {
+                    try {
+                        // 1. Hide native auto-nav links
+                        const nav = P.querySelector('[data-testid="stSidebarNav"]');
+                        if (nav) nav.style.display = 'none';
 
-                    // 2. Find the native collapse buttons (open & closed states)
-                    const collapseBtn  = P.querySelector('[data-testid="stSidebarCollapseButton"]');
-                    const expandBtn    = P.querySelector('[data-testid="collapsedControl"]');
+                        // 2. Style sidebar dark
+                        const sidebar = P.querySelector('[data-testid="stSidebar"] > div:first-child')
+                                     || P.querySelector('[data-testid="stSidebar"]');
+                        if (sidebar) sidebar.style.background = 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)';
 
-                    // 3. Style sidebar dark
-                    const sidebar = P.querySelector('[data-testid="stSidebar"] > div:first-child');
-                    if (sidebar) sidebar.style.background = 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)';
+                        // 3. Style the collapse button (open sidebar state - inside dark sidebar)
+                        const collapseBtn = P.querySelector('[data-testid="stSidebarCollapseButton"]');
+                        if (collapseBtn) {
+                            collapseBtn.style.background = 'rgba(255,255,255,0.1)';
+                            collapseBtn.style.border = '1px solid rgba(255,255,255,0.25)';
+                            collapseBtn.style.borderRadius = '10px';
+                            collapseBtn.style.visibility = 'hidden'; // hidden - our btn replaces it
+                            const svg = collapseBtn.querySelector('svg');
+                            if (svg) { svg.style.fill = '#fff'; svg.style.color = '#fff'; }
+                        }
 
-                    // 4. Make collapse button (inside open sidebar) subtle white
-                    if (collapseBtn) {
-                        collapseBtn.style.background = 'rgba(255,255,255,0.1)';
-                        collapseBtn.style.border = '1px solid rgba(255,255,255,0.25)';
-                        collapseBtn.style.borderRadius = '10px';
-                        const svg = collapseBtn.querySelector('svg');
-                        if (svg) { svg.style.fill = '#ffffff'; svg.style.color = '#ffffff'; }
-                    }
+                        // 4. Hide the expand button (closed sidebar state - we replace it)
+                        const expandBtn = P.querySelector('[data-testid="collapsedControl"]');
+                        if (expandBtn) expandBtn.style.visibility = 'hidden';
 
-                    // 5. Inject a vivid purple hamburger into the PARENT doc if not already done
-                    if (!P.getElementById('gmr-menu-btn')) {
-                        const btn = P.createElement('button');
-                        btn.id = 'gmr-menu-btn';
-                        btn.innerHTML = '&#9776;';
-                        btn.title = 'Open / Close Menu';
-                        btn.style.cssText = [
-                            'position:fixed', 'top:10px', 'left:10px', 'z-index:9999999',
-                            'background:#4f46e5', 'color:#fff', 'border:none',
-                            'border-radius:10px', 'width:44px', 'height:44px',
-                            'font-size:22px', 'cursor:pointer', 'line-height:1',
-                            'box-shadow:0 4px 15px rgba(79,70,229,0.55)',
-                            'transition:all .2s'
-                        ].join(';');
-                        btn.onmouseover = () => { btn.style.background='#7c3aed'; btn.style.transform='scale(1.1)'; };
-                        btn.onmouseout  = () => { btn.style.background='#4f46e5'; btn.style.transform='scale(1)'; };
-                        btn.onclick = () => {
-                            // Click whichever native button is currently visible
-                            const target = P.querySelector('[data-testid="stSidebarCollapseButton"]') ||
-                                           P.querySelector('[data-testid="collapsedControl"]');
-                            if (target) target.click();
-                        };
-                        P.body.appendChild(btn);
-                    }
-
-                    // 6. Hide the now-redundant native expand/collapse arrow buttons
-                    //    (our hamburger replaces them visually)
-                    if (collapseBtn) collapseBtn.style.visibility = 'hidden';
-                    if (expandBtn)   expandBtn.style.visibility   = 'hidden';
-
-                } catch(e) { /* cross-origin guard — fail silently */ }
+                        // 5. Inject our permanent vivid hamburger into this document if not present
+                        if (!P.getElementById('gmr-menu-btn')) {
+                            const btn = P.createElement('button');
+                            btn.id = 'gmr-menu-btn';
+                            btn.innerHTML = '&#9776;'; // ☰
+                            btn.title = 'Toggle Menu';
+                            btn.style.cssText = [
+                                'position:fixed','top:10px','left:10px',
+                                'z-index:2147483647',  /* max z-index */
+                                'background:#4f46e5','color:#fff','border:2px solid #6366f1',
+                                'border-radius:12px','width:48px','height:48px',
+                                'font-size:24px','cursor:pointer','line-height:1',
+                                'display:flex','align-items:center','justify-content:center',
+                                'box-shadow:0 4px 20px rgba(79,70,229,0.6)',
+                                'transition:all .2s ease'
+                            ].join(';');
+                            btn.addEventListener('mouseenter', function() {
+                                btn.style.background = '#7c3aed';
+                                btn.style.transform = 'scale(1.1)';
+                            });
+                            btn.addEventListener('mouseleave', function() {
+                                btn.style.background = '#4f46e5';
+                                btn.style.transform = 'scale(1)';
+                            });
+                            btn.addEventListener('click', function() {
+                                // Find and click the native Streamlit toggle (whichever state)
+                                const target = P.querySelector('[data-testid="stSidebarCollapseButton"]')
+                                            || P.querySelector('[data-testid="collapsedControl"]');
+                                if (target) {
+                                    // Temporarily make visible to click, then hide again
+                                    target.style.visibility = 'visible';
+                                    target.click();
+                                    setTimeout(function() { target.style.visibility = 'hidden'; }, 100);
+                                }
+                            });
+                            P.body.appendChild(btn);
+                        }
+                    } catch(e) { /* fail silently on cross-origin */ }
+                });
             }
 
+            // Run once on load, then watch for DOM changes (Streamlit rerenders)
             applyAll();
             new MutationObserver(applyAll).observe(document.body, {childList:true, subtree:true});
         })();
