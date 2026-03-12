@@ -178,83 +178,78 @@ def inject_custom_css():
         /*   2. SIDEBAR — PREMIUM DARK DESIGN           */
         /* ============================================ */
         [data-testid="stSidebar"] {
-            background: linear-gradient(160deg, #0f172a 100%, #1e293b 100%) !important;
-            border-right: none !important;
-            box-shadow: 4px 0 30px rgba(0,0,0,0.15) !important;
-        }
-        
-        /* All text inside sidebar white */
-        [data-testid="stSidebar"] p,
-        [data-testid="stSidebar"] span,
-        [data-testid="stSidebar"] label,
-        [data-testid="stSidebar"] h1,
-        [data-testid="stSidebar"] h2,
-        [data-testid="stSidebar"] h3,
-        [data-testid="stSidebar"] h4,
-        [data-testid="stSidebar"] h5,
-        [data-testid="stSidebar"] small,
-        [data-testid="stSidebar"] .stMarkdown p {
-            color: #e2e8f0 !important;
-        }
-        
-        /* Section headers like 'Operations' */
-        [data-testid="stSidebar"] h6 {
-            color: #94a3b8 !important;
-            font-size: 11px !important;
-            font-weight: 700 !important;
-            letter-spacing: 1.5px !important;
-            text-transform: uppercase !important;
-            padding: 16px 16px 4px 16px !important;
+            background-color: #111827 !important; /* Solid Slate Black */
+            background-image: linear-gradient(180deg, #111827 0%, #1f2937 100%) !important;
+            border-right: 1px solid rgba(255,255,255,0.05) !important;
         }
 
-        /* ================================================ */
-        /* SIDEBAR TOGGLE BUTTONS — ALWAYS FULLY VISIBLE     */
-        /* ================================================ */
-
-        /* When sidebar is OPEN — button lives inside dark sidebar */
-        [data-testid="stSidebarCollapseButton"] {
-            background: rgba(255,255,255,0.1) !important;
-            border: 1px solid rgba(255,255,255,0.2) !important;
-            border-radius: 50% !important;
-            margin-top: 10px !important;
-            margin-left: 10px !important;
-            width: 40px !important;
-            height: 40px !important;
+        /* Ensure the container inside sidebar is visible and clear */
+        [data-testid="stSidebarContent"] {
+            background-color: transparent !important;
         }
-        [data-testid="stSidebarCollapseButton"] svg {
-            fill: #ffffff !important;
+
+        /* All text and links inside sidebar MUST be light silver/white */
+        [data-testid="stSidebar"] *, 
+        [data-testid="stSidebar"] div, 
+        [data-testid="stSidebar"] span, 
+        [data-testid="stSidebar"] p, 
+        [data-testid="stSidebar"] a {
+            color: #d1d5db !important;
+        }
+
+        /* Active/Hover states for navigation links */
+        [data-testid="stSidebar"] a:hover {
+            background-color: rgba(255,255,255,0.05) !important;
             color: #ffffff !important;
         }
 
-        /* When sidebar is CLOSED — Dark Floating Button for Mobile/Laptop */
+        /* Section headers in sidebar */
+        [data-testid="stSidebar"] h6 {
+            color: #6b7280 !important;
+            font-size: 0.7rem !important;
+            font-weight: 700 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.1em !important;
+            margin-top: 1.5rem !important;
+            padding-left: 1rem !important;
+        }
+
+        /* ================================================ */
+        /* SIDEBAR TOGGLE BUTTONS — HIGHEST CLARITY         */
+        /* ================================================ */
+
+        /* Internal Collapse Button (when sidebar is open) */
+        [data-testid="stSidebarCollapseButton"] {
+            background: rgba(255,255,255,0.08) !important;
+            border: 1px solid rgba(255,255,255,0.1) !important;
+            border-radius: 50% !important;
+            right: 10px !important;
+            top: 10px !important;
+        }
+
+        /* External Expand Button (floating on the page) */
         [data-testid="collapsedControl"] {
-            background: #0f172a !important; /* Deep Navy Black */
-            border-radius: 50% !important;  /* Circular FAB style */
+            background-color: #0f172a !important;
+            border-radius: 50% !important;
             border: 2px solid #334155 !important;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.3) !important;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3) !important;
             width: 50px !important;
             height: 50px !important;
             position: fixed !important;
             top: 15px !important;
             left: 15px !important;
-            z-index: 10000000 !important; /* Extremely high to stay above banner */
+            z-index: 10000000 !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            cursor: pointer !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
         }
-        [data-testid="collapsedControl"]:hover {
-            background: #1e293b !important;
-            transform: scale(1.1) rotate(5deg) !important;
-        }
+
+        /* SVG Arrow Icons */
+        [data-testid="stSidebarCollapseButton"] svg,
         [data-testid="collapsedControl"] svg {
             fill: #ffffff !important;
-            color: #ffffff !important;
-            width: 30px !important;
-            height: 30px !important;
+            width: 24px !important;
+            height: 24px !important;
         }
 
         /* Mobile specific — ensure it's not cut off by status bar */
