@@ -173,7 +173,7 @@ def inject_custom_css():
         /*   2. SIDEBAR — PREMIUM DARK DESIGN           */
         /* ============================================ */
         [data-testid="stSidebar"] {
-            background: linear-gradient(160deg, #0f172a 0%, #1e293b 100%) !important;
+            background: linear-gradient(160deg, #0f172a 100%, #1e293b 100%) !important;
             border-right: none !important;
             box-shadow: 4px 0 30px rgba(0,0,0,0.15) !important;
         }
@@ -956,5 +956,6 @@ def trigger_thermal_print(html_content):
     </script>
     """
     components.html(print_js, height=0, width=0)
+
 
 
