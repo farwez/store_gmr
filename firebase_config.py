@@ -46,6 +46,7 @@ try:
             pass
 
     db = firestore.client()
+    firestore_module = firestore
     
     # Try to get storage bucket, but make it optional
     try:
