@@ -202,44 +202,75 @@ def inject_custom_css():
             padding: 16px 16px 4px 16px !important;
         }
 
-        /* COLLAPSE/EXPAND ARROW — always visible */
-        /* When sidebar is OPEN — the collapse button sits inside dark sidebar */
-        [data-testid="stSidebarCollapseButton"] {
-            background: rgba(255,255,255,0.12) !important;
-            border: 1px solid rgba(255,255,255,0.25) !important;
+        /* ================================================ */
+        /* SIDEBAR TOGGLE BUTTONS — ALWAYS FULLY VISIBLE     */
+        /* ================================================ */
+
+        /* When sidebar is OPEN — button lives inside dark sidebar, make it white */
+        [data-testid="stSidebarCollapseButton"],
+        [data-testid="stSidebarCollapseButton"] > button {
+            visibility: visible !important;
+            opacity: 1 !important;
+            background: rgba(255,255,255,0.15) !important;
+            border: 1px solid rgba(255,255,255,0.3) !important;
             border-radius: 10px !important;
         }
-        [data-testid="stSidebarCollapseButton"] svg {
+        [data-testid="stSidebarCollapseButton"] svg,
+        [data-testid="stSidebarCollapseButton"] > button svg {
             fill: #ffffff !important;
             color: #ffffff !important;
         }
-        /* When sidebar is CLOSED — the expand button sits on the white main page */
-        [data-testid="collapsedControl"] {
-            background: #4f46e5 !important;
-            border: 2px solid #6366f1 !important;
-            border-radius: 10px !important;
-            box-shadow: 0 4px 14px rgba(79,70,229,0.5) !important;
-            position: fixed !important;
-            top: 10px !important;
-            left: 10px !important;
-            z-index: 99999 !important;
-            width: 44px !important;
-            height: 44px !important;
+
+        /* When sidebar is CLOSED — button sits on WHITE page, MUST be vivid */
+        /* Target every possible variant Streamlit uses */
+        [data-testid="collapsedControl"],
+        [data-testid="collapsedControl"] > button,
+        button[data-testid="collapsedControl"] {
+            visibility: visible !important;
+            opacity: 1 !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
+            background: #4f46e5 !important;
+            border: 2px solid #6366f1 !important;
+            border-radius: 12px !important;
+            width: 50px !important;
+            height: 50px !important;
+            min-width: 50px !important;
+            min-height: 50px !important;
             cursor: pointer !important;
+            box-shadow: 0 4px 20px rgba(79,70,229,0.65) !important;
+            position: fixed !important;
+            top: 8px !important;
+            left: 8px !important;
+            z-index: 2147483647 !important;
         }
-        [data-testid="collapsedControl"]:hover {
+        [data-testid="collapsedControl"]:hover,
+        [data-testid="collapsedControl"] > button:hover {
             background: #7c3aed !important;
+            box-shadow: 0 6px 24px rgba(124,58,237,0.7) !important;
             transform: scale(1.08) !important;
-            box-shadow: 0 6px 20px rgba(124,58,237,0.6) !important;
         }
-        [data-testid="collapsedControl"] svg {
+        [data-testid="collapsedControl"] svg,
+        [data-testid="collapsedControl"] > button svg,
+        button[data-testid="collapsedControl"] svg {
             fill: #ffffff !important;
             color: #ffffff !important;
-            width: 20px !important;
-            height: 20px !important;
+            width: 22px !important;
+            height: 22px !important;
+        }
+
+        /* Mobile specific — make even larger for touch */
+        @media (max-width: 768px) {
+            [data-testid="collapsedControl"],
+            [data-testid="collapsedControl"] > button {
+                width: 56px !important;
+                height: 56px !important;
+                top: 6px !important;
+                left: 6px !important;
+                font-size: 26px !important;
+                box-shadow: 0 6px 24px rgba(79,70,229,0.8) !important;
+            }
         }
 
         /* Hide native navigation list */
@@ -445,81 +476,32 @@ def inject_custom_css():
     <script>
         (function() {
             function applyAll() {
-                // On desktop: Streamlit app runs inside an iframe, so use window.parent
-                // On mobile: the app may run directly, so window.parent === window
-                // We try BOTH documents to cover both cases reliably
-                const docs = [];
-                try { if (window.parent && window.parent.document !== document) docs.push(window.parent.document); } catch(e) {}
-                docs.push(document);
+                // Try both document and window.parent.document (for iframe/non-iframe environments)
+                const docs = [document];
+                try { if (window.parent && window.parent.document !== document) docs.unshift(window.parent.document); } catch(e) {}
 
                 docs.forEach(function(P) {
                     try {
-                        // 1. Hide native auto-nav links
+                        // Hide native auto-generated nav links only
                         const nav = P.querySelector('[data-testid="stSidebarNav"]');
                         if (nav) nav.style.display = 'none';
 
-                        // 2. Style sidebar dark
-                        const sidebar = P.querySelector('[data-testid="stSidebar"] > div:first-child')
-                                     || P.querySelector('[data-testid="stSidebar"]');
-                        if (sidebar) sidebar.style.background = 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)';
+                        // Style sidebar dark
+                        const sidebarInner = P.querySelector('[data-testid="stSidebar"] > div:first-child')
+                                          || P.querySelector('[data-testid="stSidebar"]');
+                        if (sidebarInner) sidebarInner.style.background = 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)';
 
-                        // 3. Style the collapse button (open sidebar state - inside dark sidebar)
-                        const collapseBtn = P.querySelector('[data-testid="stSidebarCollapseButton"]');
-                        if (collapseBtn) {
-                            collapseBtn.style.background = 'rgba(255,255,255,0.1)';
-                            collapseBtn.style.border = '1px solid rgba(255,255,255,0.25)';
-                            collapseBtn.style.borderRadius = '10px';
-                            collapseBtn.style.visibility = 'hidden'; // hidden - our btn replaces it
-                            const svg = collapseBtn.querySelector('svg');
-                            if (svg) { svg.style.fill = '#fff'; svg.style.color = '#fff'; }
-                        }
-
-                        // 4. Hide the expand button (closed sidebar state - we replace it)
+                        // Ensure collapsedControl and its children are NOT hidden
                         const expandBtn = P.querySelector('[data-testid="collapsedControl"]');
-                        if (expandBtn) expandBtn.style.visibility = 'hidden';
-
-                        // 5. Inject our permanent vivid hamburger into this document if not present
-                        if (!P.getElementById('gmr-menu-btn')) {
-                            const btn = P.createElement('button');
-                            btn.id = 'gmr-menu-btn';
-                            btn.innerHTML = '&#9776;'; // ☰
-                            btn.title = 'Toggle Menu';
-                            btn.style.cssText = [
-                                'position:fixed','top:10px','left:10px',
-                                'z-index:2147483647',  /* max z-index */
-                                'background:#4f46e5','color:#fff','border:2px solid #6366f1',
-                                'border-radius:12px','width:48px','height:48px',
-                                'font-size:24px','cursor:pointer','line-height:1',
-                                'display:flex','align-items:center','justify-content:center',
-                                'box-shadow:0 4px 20px rgba(79,70,229,0.6)',
-                                'transition:all .2s ease'
-                            ].join(';');
-                            btn.addEventListener('mouseenter', function() {
-                                btn.style.background = '#7c3aed';
-                                btn.style.transform = 'scale(1.1)';
-                            });
-                            btn.addEventListener('mouseleave', function() {
-                                btn.style.background = '#4f46e5';
-                                btn.style.transform = 'scale(1)';
-                            });
-                            btn.addEventListener('click', function() {
-                                // Find and click the native Streamlit toggle (whichever state)
-                                const target = P.querySelector('[data-testid="stSidebarCollapseButton"]')
-                                            || P.querySelector('[data-testid="collapsedControl"]');
-                                if (target) {
-                                    // Temporarily make visible to click, then hide again
-                                    target.style.visibility = 'visible';
-                                    target.click();
-                                    setTimeout(function() { target.style.visibility = 'hidden'; }, 100);
-                                }
-                            });
-                            P.body.appendChild(btn);
+                        if (expandBtn) {
+                            expandBtn.style.visibility = 'visible';
+                            expandBtn.style.opacity = '1';
+                            expandBtn.style.display = 'flex';
                         }
-                    } catch(e) { /* fail silently on cross-origin */ }
+                    } catch(e) {}
                 });
             }
 
-            // Run once on load, then watch for DOM changes (Streamlit rerenders)
             applyAll();
             new MutationObserver(applyAll).observe(document.body, {childList:true, subtree:true});
         })();
