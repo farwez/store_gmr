@@ -11,6 +11,7 @@ from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from utils import inject_custom_css, render_sidebar, get_ist_time, check_admin
 
+st.set_page_config(page_title="Reports", layout="wide", page_icon="📊", initial_sidebar_state="expanded")
 inject_custom_css()
 render_sidebar()
 check_admin()
