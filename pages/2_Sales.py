@@ -1,5 +1,5 @@
 import streamlit as st
-from firebase_config import db
+from firebase_config import db, firestore_module
 from utils import (
     generate_bill_pdf,
     upload_bill_to_firebase,
@@ -9,7 +9,9 @@ from utils import (
     render_sidebar,
     get_all_items,
     generate_bill_html,
-    get_ist_time
+    get_ist_time,
+    generate_thermal_bill_html,
+    trigger_thermal_print
 )
 import streamlit.components.v1 as components
 from datetime import datetime
@@ -49,9 +51,11 @@ if st.session_state.get("last_bill"):
         col_s1, col_s2, col_s3 = st.columns([2, 2, 1])
         
         with col_s1:
+            local_exists = False
             try:
                 import os
                 if os.path.exists(bill['pdf']):
+                    local_exists = True
                     with open(bill['pdf'], "rb") as f:
                         st.download_button(
                             "📄 Download PDF", 
@@ -62,13 +66,30 @@ if st.session_state.get("last_bill"):
                             type="primary"
                         )
             except:
-                st.error("File missing")
+                pass
+            
+            if not local_exists and bill.get("public_url"):
+                st.link_button("🌐 Open from Cloud", bill["public_url"], use_container_width=True, type="primary")
                 
         with col_s2:
             if bill.get('wa_link'):
                 st.link_button("📲 WhatsApp", bill['wa_link'], use_container_width=True)
                 
-        with col_s3:
+        # New Column for Thermal Print
+        col_s4, col_s5 = st.columns([1, 1])
+        with col_s4:
+            if st.button("🖨️ Thermal Print", use_container_width=True):
+                # We need the bill data to generate the thermal version
+                # If we saved it in session state correctly:
+                thermal_html = generate_thermal_bill_html(
+                    bill['items'], bill['subtotal'], bill['discount_amount'], 
+                    bill['discount_type'], bill['total'], bill['name'], 
+                    bill.get('phone', ''), bill.get('pay_method', ''), bill.get('heading', 'TAX INVOICE')
+                )
+                trigger_thermal_print(thermal_html)
+                st.toast("Printing receipt...")
+        
+        with col_s5:
             if st.button("❌ Close", use_container_width=True):
                 del st.session_state["last_bill"]
                 st.rerun()
@@ -100,7 +121,7 @@ try:
     selected_item_id = st.selectbox(
         "Select Item",
         options=list(items_list.keys()),
-        format_func=lambda x: f"{items_list[x]['name']} - ₹{items_list[x]['price']}"
+        format_func=lambda x: f"{items_list[x]['name']} (Stock: {items_list[x].get('stock', 0)}) - ₹{items_list[x]['price']}"
     )
     
     qty = st.number_input("Quantity", min_value=1, step=1)
@@ -112,12 +133,23 @@ cart = st.session_state.get("cart", [])
 
 if st.button("Add to Cart"):
     item = items_list[selected_item_id]
-    cart.append({
-        "name": item["name"],
-        "qty": qty,
-        "price": item["price"]
-    })
+    current_stock = item.get("stock", 0)
+    
+    # Check if already in cart
+    already_in_cart = sum(c['qty'] for c in cart if c['id'] == selected_item_id)
+    
+    if (already_in_cart + qty) > current_stock:
+        st.error(f"❌ Cannot add. Only {current_stock - already_in_cart} units left in stock.")
+    else:
+        cart.append({
+            "id": selected_item_id,
+            "name": item["name"],
+            "qty": qty,
+            "price": item["price"],
+            "cost": item.get("cost_price", 0) # Store cost at time of sale
+        })
     st.session_state.cart = cart
+    st.toast(f"🛒 {item['name']} added!")
 
 
 st.divider()
@@ -125,13 +157,28 @@ st.divider()
 # Calculate subtotal
 subtotal = 0
 if cart:
-    st.subheader("🛒 Cart Items")
-    for c in cart:
+    st.subheader("🛒 Cart Items", anchor=False)
+    
+    # Create header
+    h_col1, h_col2, h_col3, h_col4 = st.columns([3, 1, 1, 1])
+    h_col1.markdown("**Item Name**")
+    h_col2.markdown("**Qty**")
+    h_col3.markdown("**Price**")
+    h_col4.markdown("**Total**")
+    
+    st.markdown("<hr style='margin: 0.5rem 0;'>", unsafe_allow_html=True)
+    
+    for i, c in enumerate(cart):
         line_total = c["qty"] * c["price"]
         subtotal += line_total
-        st.write(f"{c['name']} × {c['qty']} = ₹{line_total}")
+        
+        row_col1, row_col2, row_col3, row_col4 = st.columns([3, 1, 1, 1])
+        row_col1.write(c['name'])
+        row_col2.write(str(c['qty']))
+        row_col3.write(f"₹{c['price']}")
+        row_col4.write(f"₹{line_total}")
     
-    st.divider()
+    st.markdown("<hr style='margin: 0.5rem 0 1.5rem 0;'>", unsafe_allow_html=True)
     
     # Discount Section
     st.subheader("💸 Discount (Optional)")
@@ -176,9 +223,13 @@ if cart:
     
     st.divider()
 
-    # Payment Selection (Moved Up)
-    st.subheader("💳 Payment Method")
-    payment_method = st.selectbox("Select Payment Mode", ["Cash", "UPI", "Card", "Credit/Due", "Other"], key="pay_method")
+    # Document Details Selection
+    st.subheader("📄 Document Details")
+    col_doc1, col_doc2 = st.columns(2)
+    with col_doc1:
+        invoice_heading = st.selectbox("Document Heading", ["TAX INVOICE", "RETAIL INVOICE", "INVOICE", "BILL OF SUPPLY"], key="invoice_heading")
+    with col_doc2:
+        payment_method = st.selectbox("Select Payment Mode", ["Cash", "UPI", "Card", "Credit/Due", "Other"], key="pay_method")
 
     # Resulting Buttons
     col_clear, col_spacer = st.columns([1, 3])
@@ -193,9 +244,9 @@ if cart:
         if not customer_name:
             st.info("ℹ️ Enter Customer Name to generate a complete preview.")
         else:
-            # Use the selected payment method in preview
+            # Use the selected payment method and heading in preview
             preview_html = generate_bill_html(cart, subtotal, discount_amount, discount_type, total, 
-                                            customer_name, customer_phone, payment_method, "TAX INVOICE (PREVIEW)")
+                                            customer_name, customer_phone, payment_method, f"{invoice_heading} (PREVIEW)")
             components.html(preview_html, height=600, scrolling=True)
             
     st.divider()
@@ -244,7 +295,7 @@ if cart:
                     st.error(f"❌ Error: {e}")
 
     with col_act2:
-        if st.button("✅ Generate Tax Invoice", type="primary", use_container_width=True):
+        if st.button(f"✅ Generate {invoice_heading.title()}", type="primary", use_container_width=True):
             if not customer_name or customer_name.strip() == "":
                 st.error("⚠️ Please enter customer name before generating bill!")
             else:
@@ -269,18 +320,38 @@ if cart:
                         "timestamp": get_ist_time()
                     }
                     
-                    # Save to sales collection
-                    db.collection("sales").add(bill_data)
+                    # Save to sales collection with Transaction for Stock Deduction
+                    @firestore_module.transactional
+                    def process_sale_transaction(transaction, sales_ref, bill_data, cart):
+                        # 1. Update stock for each item
+                        for item in cart:
+                            item_ref = db.collection("items_master").document(item['id'])
+                            snapshot = item_ref.get(transaction=transaction)
+                            if not snapshot.exists:
+                                raise Exception(f"Item {item['name']} not found!")
+                            
+                            current_stock = snapshot.get("stock")
+                            if current_stock < item['qty']:
+                                raise Exception(f"Insufficient stock for {item['name']}! Available: {current_stock}")
+                            
+                            transaction.update(item_ref, {"stock": current_stock - item['qty']})
+                        
+                        # 2. Add the sale record
+                        transaction.create(sales_ref, bill_data)
+
+                    # Execute transaction
+                    sales_ref = db.collection("sales").document()
+                    process_sale_transaction(db.transaction(), sales_ref, bill_data, cart)
                     
                     # Generate PDF
                     generate_bill_pdf(pdf_name, cart, subtotal, discount_amount, discount_type, total, 
-                                     customer_name, customer_phone, payment_method, "TAX INVOICE")
+                                     customer_name, customer_phone, payment_method, invoice_heading)
                     
                     # Upload to Firebase
                     public_url = upload_bill_to_firebase(pdf_name, f"bill_{bill_id}.pdf")
                     
                     # WhatsApp sharing link generation
-                    wa_msg = build_whatsapp_message(cart, subtotal, discount_amount, discount_type, total, customer_name)
+                    wa_msg = build_whatsapp_message(cart, subtotal, discount_amount, discount_type, total, customer_name, invoice_heading)
                     if customer_phone and len(customer_phone.strip()) == 10:
                         wa_link = f"https://wa.me/91{customer_phone.strip()}?text={wa_msg}"
                     else:
@@ -289,9 +360,18 @@ if cart:
                     # Store data for next run (Success message & Download)
                     st.session_state["last_bill"] = {
                         "name": customer_name,
+                        "phone": customer_phone,
                         "pdf": pdf_name,
                         "file_name": f"bill_{bill_id}.pdf",
-                        "wa_link": wa_link
+                        "wa_link": wa_link,
+                        "public_url": public_url,
+                        "items": cart,
+                        "subtotal": subtotal,
+                        "discount_amount": discount_amount,
+                        "discount_type": discount_type,
+                        "total": total,
+                        "pay_method": payment_method,
+                        "heading": invoice_heading
                     }
                     
                     # Trigger reset and rerun
