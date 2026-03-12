@@ -445,18 +445,66 @@ def inject_custom_css():
     <script>
         (function() {
             function applyAll() {
-                // 1. Hide the native Streamlit auto-generated nav links only
-                const nav = document.querySelector('[data-testid="stSidebarNav"]');
-                if (nav) nav.style.display = 'none';
+                try {
+                    // We use window.parent to cross the iframe boundary into the Streamlit shell
+                    const P = window.parent.document;
 
-                // 2. Style the sidebar dark if present
-                const sidebar = document.querySelector('[data-testid="stSidebar"] > div:first-child');
-                if (sidebar) {
-                    sidebar.style.background = 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)';
-                }
+                    // 1. Hide native nav auto-links
+                    const nav = P.querySelector('[data-testid="stSidebarNav"]');
+                    if (nav) nav.style.display = 'none';
+
+                    // 2. Find the native collapse buttons (open & closed states)
+                    const collapseBtn  = P.querySelector('[data-testid="stSidebarCollapseButton"]');
+                    const expandBtn    = P.querySelector('[data-testid="collapsedControl"]');
+
+                    // 3. Style sidebar dark
+                    const sidebar = P.querySelector('[data-testid="stSidebar"] > div:first-child');
+                    if (sidebar) sidebar.style.background = 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)';
+
+                    // 4. Make collapse button (inside open sidebar) subtle white
+                    if (collapseBtn) {
+                        collapseBtn.style.background = 'rgba(255,255,255,0.1)';
+                        collapseBtn.style.border = '1px solid rgba(255,255,255,0.25)';
+                        collapseBtn.style.borderRadius = '10px';
+                        const svg = collapseBtn.querySelector('svg');
+                        if (svg) { svg.style.fill = '#ffffff'; svg.style.color = '#ffffff'; }
+                    }
+
+                    // 5. Inject a vivid purple hamburger into the PARENT doc if not already done
+                    if (!P.getElementById('gmr-menu-btn')) {
+                        const btn = P.createElement('button');
+                        btn.id = 'gmr-menu-btn';
+                        btn.innerHTML = '&#9776;';
+                        btn.title = 'Open / Close Menu';
+                        btn.style.cssText = [
+                            'position:fixed', 'top:10px', 'left:10px', 'z-index:9999999',
+                            'background:#4f46e5', 'color:#fff', 'border:none',
+                            'border-radius:10px', 'width:44px', 'height:44px',
+                            'font-size:22px', 'cursor:pointer', 'line-height:1',
+                            'box-shadow:0 4px 15px rgba(79,70,229,0.55)',
+                            'transition:all .2s'
+                        ].join(';');
+                        btn.onmouseover = () => { btn.style.background='#7c3aed'; btn.style.transform='scale(1.1)'; };
+                        btn.onmouseout  = () => { btn.style.background='#4f46e5'; btn.style.transform='scale(1)'; };
+                        btn.onclick = () => {
+                            // Click whichever native button is currently visible
+                            const target = P.querySelector('[data-testid="stSidebarCollapseButton"]') ||
+                                           P.querySelector('[data-testid="collapsedControl"]');
+                            if (target) target.click();
+                        };
+                        P.body.appendChild(btn);
+                    }
+
+                    // 6. Hide the now-redundant native expand/collapse arrow buttons
+                    //    (our hamburger replaces them visually)
+                    if (collapseBtn) collapseBtn.style.visibility = 'hidden';
+                    if (expandBtn)   expandBtn.style.visibility   = 'hidden';
+
+                } catch(e) { /* cross-origin guard — fail silently */ }
             }
+
             applyAll();
-            new MutationObserver(applyAll).observe(document.body, {childList: true, subtree: true});
+            new MutationObserver(applyAll).observe(document.body, {childList:true, subtree:true});
         })();
     </script>
     """, unsafe_allow_html=True)
