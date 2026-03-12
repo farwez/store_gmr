@@ -202,32 +202,39 @@ def inject_custom_css():
             padding: 16px 16px 4px 16px !important;
         }
 
-        /* COLLAPSE/EXPAND ARROW — max visibility on white main area */
-        [data-testid="stSidebarCollapseButton"],
+        /* COLLAPSE/EXPAND ARROW — always visible */
+        /* When sidebar is OPEN — the collapse button sits inside dark sidebar */
+        [data-testid="stSidebarCollapseButton"] {
+            background: rgba(255,255,255,0.12) !important;
+            border: 1px solid rgba(255,255,255,0.25) !important;
+            border-radius: 10px !important;
+        }
+        [data-testid="stSidebarCollapseButton"] svg {
+            fill: #ffffff !important;
+            color: #ffffff !important;
+        }
+        /* When sidebar is CLOSED — the expand button sits on the white main page */
         [data-testid="collapsedControl"] {
             background: #4f46e5 !important;
             border: 2px solid #6366f1 !important;
             border-radius: 10px !important;
-            min-width: 40px !important;
-            min-height: 40px !important;
+            box-shadow: 0 4px 14px rgba(79,70,229,0.5) !important;
             position: fixed !important;
-            top: 12px !important;
-            left: 12px !important;
-            z-index: 9999 !important;
+            top: 10px !important;
+            left: 10px !important;
+            z-index: 99999 !important;
+            width: 44px !important;
+            height: 44px !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            box-shadow: 0 4px 14px rgba(79,70,229,0.5) !important;
-            transition: all 0.2s ease !important;
             cursor: pointer !important;
         }
-        [data-testid="stSidebarCollapseButton"]:hover,
         [data-testid="collapsedControl"]:hover {
             background: #7c3aed !important;
-            transform: scale(1.1) !important;
+            transform: scale(1.08) !important;
             box-shadow: 0 6px 20px rgba(124,58,237,0.6) !important;
         }
-        [data-testid="stSidebarCollapseButton"] svg,
         [data-testid="collapsedControl"] svg {
             fill: #ffffff !important;
             color: #ffffff !important;
@@ -438,61 +445,16 @@ def inject_custom_css():
     <script>
         (function() {
             function applyAll() {
-                // 1. Hide the native Streamlit auto-generated nav links
+                // 1. Hide the native Streamlit auto-generated nav links only
                 const nav = document.querySelector('[data-testid="stSidebarNav"]');
                 if (nav) nav.style.display = 'none';
 
-                // 2. Completely hide the native collapse arrow button (we replace it)
-                const collapseBtn = document.querySelector('[data-testid="stSidebarCollapseButton"]');
-                if (collapseBtn) collapseBtn.style.display = 'none';
-                
-                // 3. Style the sidebar dark if present
-                const sidebar = document.querySelector('[data-testid="stSidebar"]');
+                // 2. Style the sidebar dark if present
+                const sidebar = document.querySelector('[data-testid="stSidebar"] > div:first-child');
                 if (sidebar) {
                     sidebar.style.background = 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)';
-                    sidebar.style.borderRight = 'none';
-                }
-
-                // 4. Inject our permanent floating hamburger if not already done
-                if (!document.getElementById('gmr-sidebar-toggle')) {
-                    const btn = document.createElement('button');
-                    btn.id = 'gmr-sidebar-toggle';
-                    btn.innerHTML = '&#9776;';  // hamburger ≡
-                    btn.title = 'Toggle Menu';
-                    btn.style.cssText = `
-                        position: fixed;
-                        top: 10px;
-                        left: 10px;
-                        z-index: 99999;
-                        background: #4f46e5;
-                        color: white;
-                        border: none;
-                        border-radius: 10px;
-                        width: 42px;
-                        height: 42px;
-                        font-size: 22px;
-                        cursor: pointer;
-                        box-shadow: 0 4px 15px rgba(79,70,229,0.5);
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        transition: all 0.2s;
-                    `;
-                    btn.onmouseover = () => { btn.style.background = '#7c3aed'; btn.style.transform = 'scale(1.1)'; };
-                    btn.onmouseout  = () => { btn.style.background = '#4f46e5'; btn.style.transform = 'scale(1)'; };
-                    btn.onclick = () => {
-                        // Click the underlying Streamlit collapse button
-                        const nativeBtn = document.querySelector('[data-testid="stSidebarCollapseButton"] button') ||
-                                          document.querySelector('[data-testid="collapsedControl"] button') ||
-                                          document.querySelector('[data-testid="stSidebarCollapseButton"]') ||
-                                          document.querySelector('[data-testid="collapsedControl"]');
-                        if (nativeBtn) nativeBtn.click();
-                    };
-                    document.body.appendChild(btn);
                 }
             }
-
-            // Run on load and observe for dynamic changes
             applyAll();
             new MutationObserver(applyAll).observe(document.body, {childList: true, subtree: true});
         })();
