@@ -202,31 +202,37 @@ def inject_custom_css():
             padding: 16px 16px 4px 16px !important;
         }
 
-        /* COLLAPSE/EXPAND ARROW — now fully visible */
+        /* COLLAPSE/EXPAND ARROW — max visibility on white main area */
         [data-testid="stSidebarCollapseButton"],
         [data-testid="collapsedControl"] {
-            background: #334155 !important;
-            border: 2px solid #475569 !important;
+            background: #4f46e5 !important;
+            border: 2px solid #6366f1 !important;
             border-radius: 10px !important;
-            width: 36px !important;
-            height: 36px !important;
-            transition: all 0.2s ease !important;
+            min-width: 40px !important;
+            min-height: 40px !important;
+            position: fixed !important;
+            top: 12px !important;
+            left: 12px !important;
+            z-index: 9999 !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
+            box-shadow: 0 4px 14px rgba(79,70,229,0.5) !important;
+            transition: all 0.2s ease !important;
+            cursor: pointer !important;
         }
         [data-testid="stSidebarCollapseButton"]:hover,
         [data-testid="collapsedControl"]:hover {
-            background: #4f46e5 !important;
-            border-color: #6366f1 !important;
-            transform: scale(1.08) !important;
+            background: #7c3aed !important;
+            transform: scale(1.1) !important;
+            box-shadow: 0 6px 20px rgba(124,58,237,0.6) !important;
         }
         [data-testid="stSidebarCollapseButton"] svg,
         [data-testid="collapsedControl"] svg {
             fill: #ffffff !important;
             color: #ffffff !important;
-            width: 18px !important;
-            height: 18px !important;
+            width: 20px !important;
+            height: 20px !important;
         }
 
         /* Hide native navigation list */
@@ -956,6 +962,5 @@ def trigger_thermal_print(html_content):
     </script>
     """
     components.html(print_js, height=0, width=0)
-
 
 
