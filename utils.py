@@ -1,5 +1,7 @@
 import streamlit as st
 import base64
+import hashlib
+import json
 import os
 import pandas as pd
 from datetime import datetime, timedelta
@@ -21,6 +23,79 @@ def get_ist_time():
 def today_string():
     return get_ist_time().strftime("%Y-%m-%d")
 
+def hash_password(password):
+    """Simple SHA-256 hashing for passwords."""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_user(username, password):
+    """Verify credentials against Firestore."""
+    try:
+        user_doc = db.collection("users").document(username.lower()).get()
+        if user_doc.exists:
+            data = user_doc.to_dict()
+            if data.get("password") == hash_password(password):
+                return {"username": username, "name": data.get("name", username)}
+        return None
+    except Exception as e:
+        print(f"Auth error: {e}")
+        return None
+
+def create_user(username, password, name=""):
+    """Create a new user in Firestore."""
+    try:
+        user_ref = db.collection("users").document(username.lower())
+        if user_ref.get().exists:
+            return False, "Username already exists"
+        
+        user_ref.set({
+            "username": username.lower(),
+            "password": hash_password(password),
+            "name": name or username,
+            "created_at": get_ist_time()
+        })
+        return True, "User created successfully"
+    except Exception as e:
+        return False, str(e)
+
+def check_auth(quiet=False):
+    """Check if user is authenticated and handle role-based redirection."""
+    # The session persistence is handled at the app level to avoid cycles
+    if not st.session_state.get("authenticated", False):
+        if not quiet:
+            st.warning("⚠️ Access Denied. Please login.")
+            if st.button("Go to Login"):
+                st.switch_page("app.py")
+            st.stop()
+        return False
+    return True
+
+def check_admin():
+    """Admin restriction removed. All users have equal access."""
+    if not check_auth():
+        st.stop()
+
+# --- SETTINGS MANAGEMENT ---
+@st.cache_data(ttl=600)
+def get_settings():
+    """Fetch store settings from Firestore with caching."""
+    try:
+        settings_ref = db.collection("settings").document("store_info").get()
+        if settings_ref.exists:
+            return settings_ref.to_dict()
+        else:
+            # Default fallback settings
+            return {
+                "store_name": "MY STORE",
+                "address": "Set Address in Settings",
+                "phone": "0000000000",
+                "email": "store@example.com",
+                "gstin": "",
+                "currency": "₹"
+            }
+    except Exception as e:
+        print(f"Error fetching settings: {e}")
+        return {}
+
 
 # Custom CSS Injection
 def inject_custom_css():
@@ -28,112 +103,142 @@ def inject_custom_css():
     <style>
         /* 1. GLOBAL LIGHT THEME ENFORCEMENT */
         :root {
-            --primary: #4F46E5;
-            --background: #f8fafc;
-            --text: #1e293b;
-            --secondary: #ffffff;
+            --brand-primary: #4f46e5;
+            --brand-secondary: #4338ca;
+            --brand-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            --bg-main: #f8fafc;
+            --card-bg: #ffffff;
+            --sidebar-bg: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #475569;
+            --border-color: #e2e8f0;
+            --radius-lg: 20px;
+            --radius-md: 12px;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+            --shadow-md: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.05);
+            --shadow-lg: 0 20px 25px -5px rgba(0,0,0,0.08), 0 10px 10px -5px rgba(0,0,0,0.04);
         }
         
-        .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
-            background-color: #f8fafc !important;
-        }
-        
-        /* Force text colors to be dark (slate-800) */
-        h1, h2, h3, h4, h5, h6, p, label, span, div, li {
-            color: #1e293b !important;
-        }
-        
-        /* Overaggressive text override for complex widgets */
-        [data-testid="stMarkdownContainer"] p, 
-        [data-testid="stWidgetLabel"] p,
-        .stSelectbox div, .stTextInput div, .stNumberInput div {
-            color: #1e293b !important;
+        .stApp {
+            background-color: var(--bg-main) !important;
+            font-family: 'Inter', sans-serif !important;
         }
 
-        /* 2. SIDEBAR STYLING */
-        section[data-testid="stSidebar"] {
-            background-color: #ffffff !important;
-            border-right: 1px solid #e2e8f0;
+        /* ------------------------------------- */
+        /* ENHANCED TEXT VISIBILITY (DESKTOP)    */
+        /* ------------------------------------- */
+        p, .stMarkdown p, .stText, [data-testid="stMarkdownContainer"] p, label, .stRadio div[role="radiogroup"] label, .stCheckbox label {
+            color: var(--text-main) !important;
+            font-size: 15px !important;
         }
         
-        section[data-testid="stSidebar"] * {
-            color: #1e293b !important;
+        /* Ensures dropdown text and inputs are clearly visible */
+        .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] span {
+            color: #0f172a !important; 
+            font-size: 15px !important;
+            font-weight: 500 !important;
         }
-        
-        /* Hide native nav */
-        [data-testid="stSidebarNav"] {
+
+        /* ------------------------------------- */
+        /* MOBILE RESPONSIVE ADJUSTMENTS         */
+        /* ------------------------------------- */
+        @media (max-width: 768px) {
+            .stMain { padding: 0.5rem !important; }
+            [data-testid="stMetric"] { padding: 15px !important; }
+            h1 { font-size: 24px !important; }
+            h2 { font-size: 20px !important; }
+            h3 { font-size: 18px !important; }
+            
+            /* FORCE LARGER, DARKER TEXT ON MOBILE */
+            p, .stMarkdown p, .stText, [data-testid="stMarkdownContainer"] p, label, .stRadio div[role="radiogroup"] label, .stCheckbox label {
+                font-size: 16px !important; 
+                line-height: 1.5 !important;
+                color: #000000 !important;
+                font-weight: 500 !important;
+            }
+            .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] span {
+                font-size: 16px !important; 
+                color: #000000 !important;
+                padding: 10px 12px !important;
+            }
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Outfit', sans-serif !important;
+            color: var(--text-main) !important;
+            font-weight: 700 !important;
+        }
+
+        /* 2. SIDEBAR - CLEAN & MINIMAL */
+        /* 2. SIDEBAR - CLEAN & MINIMAL */
+        [data-testid="stSidebar"] {
+            background-color: var(--sidebar-bg) !important;
+            border-right: 1px solid var(--border-color) !important;
+            box-shadow: 4px 0 24px rgba(0,0,0,0.02) !important;
+        }
+
+        /* Hide native navigation list but keep sidebar functionality */
+        section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {
             display: none !important;
         }
-        
-        /* Custom Nav Link Styling - restoring premium feel */
+
+        /* Custom Page Links in Sidebar */
         div[data-testid="stPageLink-NavLink"] {
-            background-color: transparent;
-            border-radius: 8px;
-            margin-bottom: 4px;
-            padding: 8px 12px;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 12px 16px !important;
+            border-radius: 12px !important;
+            margin: 4px 12px !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            border: 1px solid transparent !important;
         }
-        
+
         div[data-testid="stPageLink-NavLink"]:hover {
-            background-color: #f1f5f9 !important;
+            background: #f8fafc !important;
+            border: 1px solid #f1f5f9 !important;
             transform: translateX(4px);
         }
-        
+
         div[data-testid="stPageLink-NavLink"][aria-current="page"] {
-            background-color: #e0e7ff !important;
-            border-left: 4px solid #4F46E5 !important;
+            background: var(--brand-gradient) !important;
+            box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3) !important;
         }
-        
+
         div[data-testid="stPageLink-NavLink"][aria-current="page"] p {
-            color: #4338ca !important;
+            color: white !important;
             font-weight: 600 !important;
         }
 
-        /* 3. INPUT WIDGETS (Inputs, Selects, etc) */
-        .stTextInput input, .stNumberInput input, .stTextArea textarea, .stDateInput input {
-            background-color: #ffffff !important;
-            color: #000000 !important;
-            border: 1px solid #cbd5e1 !important;
-            border-radius: 8px !important;
+        /* 5. INPUTS - CLEAN WHITE */
+        .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
+            background: white !important;
+            border-radius: 12px !important;
+            border: 1px solid var(--border-color) !important;
+            padding: 8px 12px !important;
+            color: black !important;
         }
         
-        /* SELECTBOX & DROPDOWN - CRITICAL FIX */
-        /* The select box itself (closed) */
-        div[data-baseweb="select"] > div {
-            background-color: #ffffff !important;
-            color: #000000 !important;
-            border-radius: 8px !important;
-        }
-        
-        /* The persistent selected item text */
-        div[data-baseweb="select"] [v-data-testid="stSelectbox"] span,
         div[data-baseweb="select"] span {
-            color: #000000 !important;
+            color: #0f172a !important;
         }
 
-        /* CALENDAR / DATE PICKER FIX */
-        [data-baseweb="calendar"], 
-        [data-baseweb="calendar"] * {
-            background-color: #ffffff !important;
-            color: #1e293b !important;
+        /* 3. CARDS & METRICS (Glassmorphism) */
+        [data-testid="stMetric"] {
+            background: var(--card-bg) !important;
+            border: 1px solid var(--border-color) !important;
+            border-radius: var(--radius-lg) !important;
+            padding: 24px !important;
+            box-shadow: var(--shadow-md) !important;
+            transition: all 0.3s ease !important;
         }
 
-        /* Calendar individual day cells */
-        [data-baseweb="calendar"] [role="gridcell"] {
-            background-color: #ffffff !important;
-            color: #1e293b !important;
+        [data-testid="stMetric"]:hover {
+            transform: translateY(-5px);
         }
 
-        /* Calendar Selected date */
-        [data-baseweb="calendar"] [aria-selected="true"] {
-            background-color: #4F46E5 !important;
-            color: #ffffff !important;
-        }
-
-        /* Calendar Hovered date */
-        [data-baseweb="calendar"] [role="gridcell"]:hover {
-            background-color: #f1f5f9 !important;
-            color: #4F46E5 !important;
+        [data-testid="stMetricValue"] {
+            color: var(--brand-primary) !important;
+            font-size: 2rem !important;
+            font-weight: 800 !important;
+            font-family: 'Outfit' !important;
         }
 
         /* THE DROPDOWN LIST (OPENED) */
@@ -168,42 +273,77 @@ def inject_custom_css():
             color: #4F46E5 !important;
         }
 
-        /* 4. METRICS & CARDS */
-        [data-testid="stMetric"] {
-            background-color: white !important;
-            padding: 20px !important;
-            border-radius: 12px !important;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
-            border: 1px solid #f1f5f9 !important;
-        }
-        
-        [data-testid="stMetricValue"] {
-            color: #4F46E5 !important;
-            font-weight: 700 !important;
-        }
-        
-        /* 5. BUTTONS */
-        button[kind="primary"] {
-            background-color: #4f46e5 !important;
-            color: white !important;
+        /* 6. ALERTS & TOASTS */
+        div.stAlert {
+            border-radius: var(--radius) !important;
             border: none !important;
-            border-radius: 8px !important;
-            box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2) !important;
-        }
-        
-        button[kind="secondary"] {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05) !important;
             background-color: white !important;
-            color: #1e293b !important;
-            border: 1px solid #d1d5db !important;
-            border-radius: 8px !important;
         }
 
-        /* Clean up some native Streamlit spacing */
-        .main .block-container {
-            padding-top: 3rem !important;
+        /* 7. TABLES - PREMIUM WHITE */
+        [data-testid="stDataFrame"] {
+            background: white !important;
+            border-radius: var(--radius) !important;
+            padding: 10px !important;
+            border: 1px solid var(--border-color) !important;
+        }
+
+        /* 8. TABS STYLING */
+        div[data-testid="stTabs"] button {
+            font-family: 'Outfit', sans-serif !important;
+            font-weight: 600 !important;
+            color: var(--text-muted) !important;
+        }
+
+        div[data-testid="stTabs"] button[aria-selected="true"] {
+            color: var(--brand-primary) !important;
+        }
+        
+        /* 9. SCROLLBARS */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* MainMenu, Footer, and Header visibility */
+        #MainMenu {visibility: visible;}
+        footer {visibility: hidden;}
+        
+        [data-testid="stHeader"] {
+            background: rgba(255, 255, 255, 0.8) !important;
+            backdrop-filter: blur(8px) !important;
+            border-bottom: 1px solid var(--border-color) !important;
+        }
+        
+        /* 4. BUTTONS - PREMIUM FEEL */
+        button[kind="primary"] {
+            background: var(--brand-gradient) !important;
+            border: none !important;
+            padding: 0.6rem 1.5rem !important;
+            border-radius: 12px !important;
+            font-weight: 600 !important;
+            color: white !important;
+            box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39) !important;
+            transition: all 0.2s ease !important;
+        }
+
+        button[kind="primary"]:hover {
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5) !important;
+            transform: scale(1.02);
+        }
+
+        button[kind="secondary"] {
+            background: white !important;
+            border: 1px solid var(--border-color) !important;
+            border-radius: 12px !important;
+            color: var(--text-main) !important;
+            transition: all 0.2s ease !important;
         }
         
     </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+
     
     <script>
         // Smoothly hide native navigation
@@ -240,6 +380,10 @@ def clear_items_cache():
 
 def render_sidebar():
     """Render a custom sidebar using streamlit-option-menu styled links"""
+    # On app.py, we don't want to stop execution if not authenticated
+    # because the login screen needs to be shown.
+    if not st.session_state.get("authenticated", False):
+        return
     try:
         with st.sidebar:
             st.image("https://img.icons8.com/color/96/shop.png", width=60)
@@ -253,18 +397,18 @@ def render_sidebar():
             st.markdown("###### Operations", help="Manage daily tasks")
             st.page_link("pages/2_Sales.py", label="New Sale", icon="🛒")
             st.page_link("pages/1_Items_Master.py", label="Inventory / Items", icon="📦")
+            st.page_link("pages/4_Credit_Book.py", label="Credit Book (Udhaar)", icon="📙")
+            st.page_link("pages/6_Expense_Tracker.py", label="Daily Expense Tracker", icon="💸")
             st.page_link("pages/5_Returns.py", label="Returns / Exchange", icon="↩️")
+            st.page_link("pages/8_Stock_Adjustments.py", label="Stock Adjustments", icon="📦")
             
             # History & Reports
             st.markdown("###### History & Reports", help="View past data")
             st.page_link("pages/7_Sales_History.py", label="Sales History", icon="📜")
             st.page_link("pages/3_Reports.py", label="Reports", icon="📊")
-            st.page_link("pages/6_Email_Reports.py", label="Email Reports", icon="📧")
             
-            # Advanced Analytics
-            st.markdown("###### Analytics", help="Deep insights")
-            st.page_link("pages/4_AI_Insights.py", label="AI Insights", icon="🧠")
-            # You can add more pages here dynamically
+            st.markdown("###### System", help="App Settings")
+            st.page_link("pages/9_Settings.py", label="Settings", icon="⚙️")
             
             st.markdown("---")
             if st.button("🔄 Refresh Data", type="secondary", use_container_width=True):
@@ -272,6 +416,19 @@ def render_sidebar():
                 st.rerun()
                 
             st.caption(f"v1.2.0 • {get_ist_time().strftime('%d-%b')}")
+            
+            if st.button("🔓 Logout", use_container_width=True):
+                # Clear local storage via JS
+                st.markdown("""
+                    <script>
+                        localStorage.removeItem('gmr_auth_session');
+                        window.location.reload();
+                    </script>
+                """, unsafe_allow_html=True)
+                st.session_state["authenticated"] = False
+                st.session_state["username"] = None
+                st.session_state["user_role"] = None
+                st.rerun()
             
     except Exception as e:
         st.error(f"Sidebar Error: {e}")
@@ -294,29 +451,43 @@ def generate_bill_pdf(filename, items, subtotal, discount_amount, discount_type,
         elements = []
         styles = getSampleStyleSheet()
         
-        # Store header with logo placeholder
+        # Get store settings
+        sett = get_settings()
+        store_name = sett.get("store_name", "MY STORE").upper()
+        store_address = sett.get("address", "Set Address in Settings")
+        store_phone = sett.get("phone", "0000000000")
+        store_email = sett.get("email", "")
+        store_gst = sett.get("gstin", "")
+
+        # Store header
         header_style = ParagraphStyle(
             'StoreHeader',
             parent=styles['Heading1'],
-            fontSize=28,
-            textColor=colors.HexColor('#1f77b4'),
+            fontSize=24,
+            textColor=colors.HexColor('#4F46E5'),
             spaceAfter=6,
             alignment=TA_CENTER,
             fontName='Helvetica-Bold'
         )
-        elements.append(Paragraph("🏪 GMR FIREWORKS", header_style))
+        # Remove emoji from PDF header to avoid character rendering issues
+        elements.append(Paragraph(f"{store_name}", header_style))
         
         # Store details
         store_details_style = ParagraphStyle(
             'StoreDetails',
             parent=styles['Normal'],
-            fontSize=10,
+            fontSize=9,
             alignment=TA_CENTER,
-            textColor=colors.HexColor('#666666')
+            textColor=colors.HexColor('#64748b')
         )
-        elements.append(Paragraph("123 Main Street, City, State - 123456", store_details_style))
-        elements.append(Paragraph("Phone: +91-1234567890 | Email: store@example.com", store_details_style))
-        elements.append(Paragraph("GSTIN: 22AAAAA0000A1Z5 (if applicable)", store_details_style))
+        
+        details_text = store_address
+        if store_phone: details_text += f" | Phone: {store_phone}"
+        if store_email: details_text += f" | Email: {store_email}"
+        elements.append(Paragraph(details_text, store_details_style))
+        
+        if store_gst:
+            elements.append(Paragraph(f"GSTIN: {store_gst}", store_details_style))
         elements.append(Spacer(1, 0.2*inch))
         
         # Horizontal line
@@ -368,14 +539,14 @@ def generate_bill_pdf(filename, items, subtotal, discount_amount, discount_type,
                 str(idx),
                 str(item.get("name", "Unknown")), 
                 str(item.get("qty", 0)), 
-                f"₹{item.get('price', 0):,.2f}",
-                f"₹{item_total:,.2f}"
+                f"Rs. {item.get('price', 0):,.2f}",
+                f"Rs. {item_total:,.2f}"
             ])
         
         # Create table with styling
         table = Table(data, colWidths=[0.5*inch, 3.5*inch, 0.75*inch, 1.25*inch, 1.25*inch])
         table.setStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f77b4')),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4F46E5')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('ALIGN', (1, 1), (1, -1), 'LEFT'),  # Item names left-aligned
@@ -386,7 +557,7 @@ def generate_bill_pdf(filename, items, subtotal, discount_amount, discount_type,
             ('TOPPADDING', (0, 1), (-1, -1), 6),
             ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('LINEBELOW', (0, 0), (-1, 0), 2, colors.HexColor('#1f77b4')),
+            ('LINEBELOW', (0, 0), (-1, 0), 2, colors.HexColor('#4F46E5')),
         ])
         
         elements.append(table)
@@ -394,22 +565,24 @@ def generate_bill_pdf(filename, items, subtotal, discount_amount, discount_type,
         
         # Totals section
         totals_data = [
-            ["", "", "", "Subtotal:", f"₹{subtotal:,.2f}"]
+            ["", "", "", "Subtotal:", f"Rs. {subtotal:,.2f}"]
         ]
         
         if discount_amount > 0:
-            discount_label = f"Discount ({discount_type.replace('Discount', '').strip()}):"
-            totals_data.append(["", "", "", discount_label, f"- ₹{discount_amount:,.2f}"])
+            # Replace ₹ with Rs. in PDF to prevent font rendering errors
+            pdf_discount_type = discount_type.replace('Discount', '').replace('₹', 'Rs.').strip()
+            discount_label = f"Discount ({pdf_discount_type}):"
+            totals_data.append(["", "", "", discount_label, f"- Rs. {discount_amount:,.2f}"])
         
-        totals_data.append(["", "", "", "Grand Total:", f"₹{total:,.2f}"])
+        totals_data.append(["", "", "", "Grand Total:", f"Rs. {total:,.2f}"])
         
         totals_table = Table(totals_data, colWidths=[0.5*inch, 3.5*inch, 0.75*inch, 1.25*inch, 1.25*inch])
         totals_table.setStyle([
             ('ALIGN', (3, 0), (-1, -1), 'RIGHT'),
             ('FONTNAME', (3, -1), (-1, -1), 'Helvetica-Bold'),
             ('FONTSIZE', (3, -1), (-1, -1), 12),
-            ('TEXTCOLOR', (3, -1), (-1, -1), colors.HexColor('#1f77b4')),
-            ('LINEABOVE', (3, -1), (-1, -1), 2, colors.HexColor('#1f77b4')),
+            ('TEXTCOLOR', (3, -1), (-1, -1), colors.HexColor('#4F46E5')),
+            ('LINEABOVE', (3, -1), (-1, -1), 2, colors.HexColor('#4F46E5')),
             ('TOPPADDING', (3, -1), (-1, -1), 8),
         ])
         
@@ -427,7 +600,8 @@ def generate_bill_pdf(filename, items, subtotal, discount_amount, discount_type,
             alignment=TA_CENTER,
             textColor=colors.HexColor('#666666')
         )
-        elements.append(Paragraph("Thank you for your business! 🙏", footer_style))
+        # Remove emoji from footer
+        elements.append(Paragraph("Thank you for your business!", footer_style))
         # REMOVED: computer-generated message
         
         doc.build(elements)
@@ -450,13 +624,13 @@ def upload_bill_to_firebase(local_file, bill_name):
         print(f"⚠️ Error uploading to Firebase (continuing without cloud upload): {e}")
         return None
 
-def build_whatsapp_message(items, subtotal, discount_amount, discount_type, total, customer_name=""):
+def build_whatsapp_message(items, subtotal, discount_amount, discount_type, total, customer_name="", invoice_title="Tax Invoice"):
     """Build a professional WhatsApp message for the bill"""
     
     # Header with store branding
     # Professional & Simple Header
     message = "*🏪 GMR FIREWORKS*\n"
-    message += "Tax Invoice\n"
+    message += f"{invoice_title}\n"
     message += "──────────────────────\n"
     
     # Customer & Date (Compact)
@@ -490,17 +664,22 @@ def build_whatsapp_message(items, subtotal, discount_amount, discount_type, tota
 
 def generate_bill_html(items, subtotal, discount_amount, discount_type, total, customer_name, customer_phone, payment_method="", invoice_title="TAX INVOICE"):
     """Generate an HTML representation of the bill for preview"""
+    sett = get_settings()
+    store_name = sett.get("store_name", "MY STORE").upper()
+    store_address = sett.get("address", "Set Address in Settings")
+    store_phone = sett.get("phone", "")
+    store_email = sett.get("email", "")
     
     html = f"""
-    <div style="background-color: white; padding: 30px; border: 1px solid #e5e7eb; border-radius: 8px; max-width: 800px; margin: 0 auto; font-family: 'Inter', sans-serif; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+    <div style="background-color: white; padding: 30px; border: 1px solid #e2e8f0; border-radius: 12px; max-width: 800px; margin: 0 auto; font-family: 'Inter', sans-serif; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);">
         <!-- Header -->
         <div style="text-align: center; margin-bottom: 20px;">
-            <h1 style="color: #1f77b4; margin: 0; font-size: 28px;">🏪 GMR FIREWORKS</h1>
-            <p style="color: #666; font-size: 14px; margin: 5px 0;">123 Main Street, City, State - 123456</p>
-            <p style="color: #666; font-size: 14px; margin: 5px 0;">Phone: +91-1234567890 | Email: store@example.com</p>
+            <h1 style="color: #4F46E5; margin: 0; font-size: 24px; font-weight: 800;">🏪 {store_name}</h1>
+            <p style="color: #64748b; font-size: 13px; margin: 5px 0;">{store_address}</p>
+            <p style="color: #64748b; font-size: 13px; margin: 5px 0;">{"Phone: " + store_phone if store_phone else ""} {"| Email: " + store_email if store_email else ""}</p>
         </div>
         
-        <hr style="border: 0; border-top: 2px solid #1f77b4; margin: 20px 0;">
+        <hr style="border: 0; border-top: 2px solid #4F46E5; margin: 20px 0; opacity: 0.2;">
         
         <h2 style="text-align: center; color: #333; margin-bottom: 20px;">{invoice_title}</h2>
         
@@ -581,5 +760,117 @@ def generate_bill_html(items, subtotal, discount_amount, discount_type, total, c
     </div>
     """
     return html
+
+
+def generate_thermal_bill_html(items, subtotal, discount_amount, discount_type, total, customer_name, customer_phone, payment_method="", invoice_title="TAX INVOICE"):
+    """Generate a high-contrast, compact HTML for 58mm/80mm thermal printers."""
+    sett = get_settings()
+    store_name = sett.get("store_name", "MY STORE").upper()
+    store_address = sett.get("address", "Set Address in Settings")
+    store_phone = sett.get("phone", "")
+    
+    html = f"""
+    <html>
+    <head>
+        <style>
+            @media print {{
+                body {{ margin: 0; padding: 0; width: 80mm; }}
+                @page {{ size: 80mm auto; margin: 0; }}
+            }}
+            body {{
+                font-family: 'Courier New', Courier, monospace;
+                width: 72mm;
+                margin: 0 auto;
+                padding: 5px;
+                font-size: 12px;
+                line-height: 1.2;
+                color: black;
+            }}
+            .text-center {{ text-align: center; }}
+            .text-right {{ text-align: right; }}
+            .bold {{ font-weight: bold; }}
+            .dashed-line {{ border-top: 1px dashed black; margin: 5px 0; }}
+            table {{ width: 100%; border-collapse: collapse; }}
+            th {{ border-bottom: 1px dashed black; padding: 2px 0; }}
+            td {{ padding: 2px 0; }}
+            .total-row {{ font-size: 14px; font-weight: bold; margin-top: 5px; }}
+        </style>
+    </head>
+    <body onload="window.print();">
+        <div class="text-center">
+            <div class="bold" style="font-size: 16px;">{store_name}</div>
+            <div style="font-size: 10px;">{store_address}</div>
+            {"<div style='font-size: 10px;'>Phone: " + store_phone + "</div>" if store_phone else ""}
+        </div>
+        
+        <div class="dashed-line"></div>
+        <div class="text-center bold">{invoice_title}</div>
+        <div class="dashed-line"></div>
+        
+        <div>Date: {get_ist_time().strftime('%d-%m-%Y')}</div>
+        <div>Time: {get_ist_time().strftime('%I:%M %p')}</div>
+        {f"<div>Cust: {customer_name}</div>" if customer_name else ""}
+        {f"<div>Ph: {customer_phone}</div>" if customer_phone else ""}
+        {f"<div>Pay: {payment_method}</div>" if payment_method else ""}
+        
+        <div class="dashed-line"></div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th align="left">ITEM</th>
+                    <th align="center">QTY</th>
+                    <th align="right">AMT</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
+    
+    for item in items:
+        line_total = item['qty'] * item['price']
+        html += f"""
+                <tr>
+                    <td align="left">{item['name'][:18]}</td>
+                    <td align="center">{item['qty']}</td>
+                    <td align="right">{line_total:,.0f}</td>
+                </tr>
+        """
+        
+    html += f"""
+            </tbody>
+        </table>
+        
+        <div class="dashed-line"></div>
+        
+        <div class="text-right">Subtotal: {subtotal:,.2f}</div>
+        {f"<div class='text-right'>Disc: -{discount_amount:,.2f}</div>" if discount_amount > 0 else ""}
+        <div class="text-right total-row">TOTAL: ₹{total:,.2f}</div>
+        
+        <div class="dashed-line"></div>
+        <div class="text-center" style="margin-top: 10px;">
+            THANK YOU! VISIT AGAIN<br>
+            *** GMR FIREWORKS ***
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
+
+def trigger_thermal_print(html_content):
+    """Utility to inject a hidden print trigger component."""
+    import streamlit.components.v1 as components
+    # We use a hidden iframe to trigger print without affecting the main UI
+    print_js = f"""
+    <iframe id="receiptFrame" style="display:none;"></iframe>
+    <script>
+        const doc = document.getElementById('receiptFrame').contentWindow.document;
+        doc.open();
+        doc.write({json.dumps(html_content)});
+        doc.close();
+        // The onload in HTML will trigger window.print()
+    </script>
+    """
+    components.html(print_js, height=0, width=0)
 
 
