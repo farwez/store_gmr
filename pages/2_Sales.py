@@ -16,6 +16,7 @@ from utils import (
 import streamlit.components.v1 as components
 from datetime import datetime
 
+st.set_page_config(page_title="New Sale", layout="wide", page_icon="🛒", initial_sidebar_state="expanded")
 inject_custom_css()
 render_sidebar()
 
