@@ -607,8 +607,7 @@ def render_sidebar():
         return
     try:
         with st.sidebar:
-            st.image("https://img.icons8.com/color/96/shop.png", width=60)
-            st.subheader("Store Manager")
+            st.subheader("GMR Store Manager")
             st.markdown("---")
             
             # Dashboard
@@ -632,13 +631,13 @@ def render_sidebar():
             st.page_link("pages/9_Settings.py", label="Settings", icon="⚙️")
             
             st.markdown("---")
-            if st.button("🔄 Refresh Data", type="secondary", use_container_width=True):
+            if st.button("Refresh Data", type="secondary", use_container_width=True):
                 clear_items_cache()
                 st.rerun()
                 
             st.caption(f"v1.2.0 • {get_ist_time().strftime('%d-%b')}")
             
-            if st.button("🔓 Logout", use_container_width=True):
+            if st.button("Logout", use_container_width=True):
                 # Clear local storage via JS
                 st.markdown("""
                     <script>
