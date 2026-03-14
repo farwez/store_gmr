@@ -256,10 +256,17 @@ def inject_custom_css():
         @media (max-width: 768px) {
             .main { padding-top: 80px !important; }
             [data-testid="collapsedControl"] {
-                width: 54px !important;
-                height: 54px !important;
-                top: 15px !important;
-                left: 15px !important;
+                width: 60px !important;
+                height: 60px !important;
+                top: 20px !important;
+                left: 20px !important;
+                background-color: #4f46e5 !important; /* Brighter color for visibility */
+                border: 2px solid #ffffff !important;
+                box-shadow: 0 4px 15px rgba(79, 70, 229, 0.6) !important;
+            }
+            [data-testid="collapsedControl"] svg {
+                width: 32px !important;
+                height: 32px !important;
             }
         }
 
