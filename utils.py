@@ -228,7 +228,9 @@ def inject_custom_css():
         }
 
         /* External Expand Button (floating on the page) */
-        [data-testid="collapsedControl"] {
+        [data-testid="collapsedControl"], 
+        [data-testid="stSidebarCollapsedControl"], 
+        [data-testid="stExpandSidebarButton"] {
             background-color: #0f172a !important;
             border-radius: 50% !important;
             border: 2px solid #334155 !important;
@@ -246,16 +248,21 @@ def inject_custom_css():
 
         /* SVG Arrow Icons */
         [data-testid="stSidebarCollapseButton"] svg,
-        [data-testid="collapsedControl"] svg {
+        [data-testid="collapsedControl"] svg,
+        [data-testid="stSidebarCollapsedControl"] svg,
+        [data-testid="stExpandSidebarButton"] svg {
             fill: #ffffff !important;
             width: 24px !important;
             height: 24px !important;
+            color: #ffffff !important;
         }
 
         /* Mobile specific — ensure it's not cut off by status bar */
         @media (max-width: 768px) {
             .main { padding-top: 80px !important; }
-            [data-testid="collapsedControl"] {
+            [data-testid="collapsedControl"], 
+            [data-testid="stSidebarCollapsedControl"], 
+            [data-testid="stExpandSidebarButton"] {
                 width: 60px !important;
                 height: 60px !important;
                 top: 20px !important;
@@ -264,7 +271,9 @@ def inject_custom_css():
                 border: 2px solid #ffffff !important;
                 box-shadow: 0 4px 15px rgba(79, 70, 229, 0.6) !important;
             }
-            [data-testid="collapsedControl"] svg {
+            [data-testid="collapsedControl"] svg,
+            [data-testid="stSidebarCollapsedControl"] svg,
+            [data-testid="stExpandSidebarButton"] svg {
                 width: 32px !important;
                 height: 32px !important;
             }
@@ -489,7 +498,9 @@ def inject_custom_css():
                         if (sidebarInner) sidebarInner.style.background = 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)';
 
                         // Ensure collapsedControl and its children are NOT hidden
-                        const expandBtn = P.querySelector('[data-testid="collapsedControl"]');
+                        const expandBtn = P.querySelector('[data-testid="collapsedControl"]') || 
+                                          P.querySelector('[data-testid="stSidebarCollapsedControl"]') ||
+                                          P.querySelector('[data-testid="stExpandSidebarButton"]');
                         if (expandBtn) {
                             expandBtn.style.visibility = 'visible';
                             expandBtn.style.opacity = '1';
