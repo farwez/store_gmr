@@ -100,8 +100,8 @@ def login_screen():
             <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px 0;">
                 <div style="background: white; padding: 35px; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); width: 100%; max-width: 440px; border: 1px solid #eef2f6;">
                     <div style="text-align: center; margin-bottom: 25px;">
-                        <h1 style="margin: 0; font-size: 26px; color: #1e293b; font-family: 'Outfit';">Welcome Back</h1>
-                        <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Sign in to your GMR Store account</p>
+                        <h1 style="margin: 0; font-size: 26px; color: #1e293b; font-family: 'Outfit';">Welcome</h1>
+                        <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Sign in to continue</p>
                     </div>
         """, unsafe_allow_html=True)
 
@@ -153,7 +153,7 @@ render_sidebar()
 
 st.markdown(f"""
     <div style="background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); padding: 40px; border-radius: 24px; margin-bottom: 30px; color: white; box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);">
-        <h1 style="color: white !important; margin: 0; font-size: 32px; font-family: 'Outfit';">Dashboard 🏪</h1>
+        <h1 style="color: white !important; margin: 0; font-size: 32px; font-family: 'Outfit';">Dashboard</h1>
         <p style="opacity: 0.9; margin-top: 10px; font-size: 16px;">Welcome back, {st.session_state.get('user_name', 'User')}</p>
     </div>
 """, unsafe_allow_html=True)
@@ -162,7 +162,7 @@ def today_string():
     return get_ist_time().strftime("%Y-%m-%d")
 
 # ==================== QUICK STATS ====================
-st.subheader("📊 Today's Overview", anchor=False)
+st.subheader("Today's Overview", anchor=False)
 col1, col2, col3, col4 = st.columns(4)
 
 try:
@@ -189,36 +189,36 @@ except Exception as e:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ==================== QUICK ACTIONS ====================
-st.subheader("⚡ Quick Actions", anchor=False)
+st.subheader("Quick Actions", anchor=False)
 
 # ROW 1
 r1c1, r1c2, r1c3 = st.columns(3)
 with r1c1:
-    if st.button("🛒 Create New Sale", use_container_width=True, type="primary"):
+    if st.button("New Sale", use_container_width=True, type="primary"):
         st.switch_page("pages/2_Sales.py")
 with r1c2:
-    if st.button("📦 Inventory Master", use_container_width=True):
+    if st.button("Inventory Master", use_container_width=True):
         st.switch_page("pages/1_Items_Master.py")
 with r1c3:
-    if st.button("📓 Credit Book (Udhaar)", use_container_width=True):
+    if st.button("Credit Book", use_container_width=True):
         st.switch_page("pages/4_Credit_Book.py")
 
 # ROW 2
 r2c1, r2c2, r2c3 = st.columns(3)
 with r2c1:
-    if st.button("💸 Expense Tracker", use_container_width=True):
+    if st.button("Expense Tracker", use_container_width=True):
         st.switch_page("pages/6_Expense_Tracker.py")
 with r2c2:
-    if st.button("📜 Sales History", use_container_width=True):
+    if st.button("Sales History", use_container_width=True):
         st.switch_page("pages/7_Sales_History.py")
 with r2c3:
-    if st.button("📊 Reports & Analytics", use_container_width=True):
+    if st.button("Reports & Analytics", use_container_width=True):
         st.switch_page("pages/3_Reports.py")
 
 st.markdown("---")
 
 # ==================== RECENT SALES ====================
-st.subheader("🕐 Recent Sales")
+st.subheader("Recent Sales")
 try:
     recent_sales = db.collection("sales").order_by("timestamp", direction="DESCENDING").limit(10).stream()
     sales_data = []
