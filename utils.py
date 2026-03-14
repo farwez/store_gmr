@@ -336,38 +336,78 @@ def inject_custom_css():
             color: #ffffff !important;
         }
 
-        /* 5. INPUTS - CLEAN WHITE */
+        /* 5. INPUTS - CLEAN WHITE & INTERACTIVE */
         .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
             background: white !important;
             border-radius: 12px !important;
             border: 1px solid var(--border-color) !important;
             padding: 8px 12px !important;
             color: black !important;
+            transition: all 0.2s ease-in-out !important;
+            box-shadow: var(--shadow-sm) !important;
+        }
+        
+        .stTextInput input:focus, .stNumberInput input:focus, .stSelectbox div[data-baseweb="select"]:focus-within {
+            border-color: var(--brand-primary) !important;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2) !important;
+            outline: none !important;
+        }
+
+        .stTextInput input:hover, .stNumberInput input:hover, .stSelectbox div[data-baseweb="select"]:hover {
+            border-color: #cbd5e1 !important;
         }
         
         div[data-baseweb="select"] span {
             color: #0f172a !important;
         }
 
-        /* 3. CARDS & METRICS (Glassmorphism) */
+        /* 3. CARDS & METRICS (Modern Elegant) */
         [data-testid="stMetric"] {
             background: var(--card-bg) !important;
             border: 1px solid var(--border-color) !important;
             border-radius: var(--radius-lg) !important;
             padding: 24px !important;
             box-shadow: var(--shadow-md) !important;
-            transition: all 0.3s ease !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            position: relative;
+            overflow: hidden;
+        }
+
+        [data-testid="stMetric"]::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 4px;
+            background: var(--brand-gradient);
+            opacity: 0;
+            transition: opacity 0.3s ease;
         }
 
         [data-testid="stMetric"]:hover {
             transform: translateY(-5px);
+            box-shadow: var(--shadow-lg) !important;
+            border-color: rgba(79, 70, 229, 0.3) !important;
+        }
+
+        [data-testid="stMetric"]:hover::before {
+            opacity: 1;
+        }
+
+        [data-testid="stMetricLabel"] {
+            font-size: 15px !important;
+            color: var(--text-muted) !important;
+            font-weight: 500 !important;
         }
 
         [data-testid="stMetricValue"] {
-            color: var(--brand-primary) !important;
-            font-size: 2rem !important;
+            color: var(--text-main) !important;
+            font-size: 2.2rem !important;
             font-weight: 800 !important;
-            font-family: 'Outfit' !important;
+            font-family: 'Outfit', sans-serif !important;
+            margin-top: 5px !important;
+        }
+        
+        [data-testid="stMetricDelta"] {
+            font-weight: 600 !important;
         }
 
         /* THE DROPDOWN LIST (OPENED) */
@@ -404,25 +444,39 @@ def inject_custom_css():
 
         /* 6. ALERTS & TOASTS */
         div.stAlert {
-            border-radius: var(--radius) !important;
-            border: none !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05) !important;
+            border-radius: var(--radius-md) !important;
+            border: 1px solid var(--border-color) !important;
+            border-left: 4px solid var(--brand-primary) !important;
+            box-shadow: var(--shadow-md) !important;
             background-color: white !important;
+            transition: all 0.3s ease !important;
+        }
+        
+        div.stAlert:hover {
+            box-shadow: var(--shadow-lg) !important;
+            transform: translateY(-2px);
         }
 
-        /* 7. TABLES - PREMIUM WHITE */
+        /* 7. TABLES - PREMIUM LOOK */
         [data-testid="stDataFrame"] {
             background: white !important;
-            border-radius: var(--radius) !important;
+            border-radius: var(--radius-md) !important;
             padding: 10px !important;
             border: 1px solid var(--border-color) !important;
+            box-shadow: var(--shadow-sm) !important;
+            overflow: hidden !important;
         }
 
-        /* 8. TABS STYLING */
+        /* 8. TABS STYLING - SMOOTH UNDELINE */
         div[data-testid="stTabs"] button {
             font-family: 'Outfit', sans-serif !important;
             font-weight: 600 !important;
             color: var(--text-muted) !important;
+            transition: all 0.3s ease !important;
+        }
+        
+        div[data-testid="stTabs"] button:hover {
+            color: var(--text-main) !important;
         }
 
         div[data-testid="stTabs"] button[aria-selected="true"] {
@@ -469,10 +523,19 @@ def inject_custom_css():
 
         button[kind="secondary"] {
             background: white !important;
-            border: 1px solid var(--border-color) !important;
+            border: 1px solid #cbd5e1 !important;
             border-radius: 12px !important;
             color: var(--text-main) !important;
-            transition: all 0.2s ease !important;
+            font-weight: 600 !important;
+            box-shadow: var(--shadow-sm) !important;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+
+        button[kind="secondary"]:hover {
+            background: var(--bg-main) !important;
+            border-color: #94a3b8 !important;
+            box-shadow: var(--shadow-md) !important;
+            transform: translateY(-1px);
         }
         
     </style>
