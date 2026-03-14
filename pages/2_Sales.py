@@ -97,10 +97,10 @@ if st.session_state.get("last_bill"):
                 
         st.divider()
 
-st.title("🛒 Sales Entry")
+st.title("Sales Entry")
 
 # Customer Information Section
-st.subheader("👤 Customer Information")
+st.subheader("Customer Information")
 col1, col2 = st.columns(2)
 with col1:
     customer_name = st.text_input("Customer Name", placeholder="Enter customer name", key="customer_name")
@@ -110,7 +110,7 @@ with col2:
 st.divider()
 
 # Items Selection Section
-st.subheader("🛍️ Select Items")
+st.subheader("Select Items")
 
 try:
     items_list = get_all_items()
@@ -158,7 +158,7 @@ st.divider()
 # Calculate subtotal
 subtotal = 0
 if cart:
-    st.subheader("🛒 Cart Items", anchor=False)
+    st.subheader("Cart Items", anchor=False)
     
     # Create header
     h_col1, h_col2, h_col3, h_col4 = st.columns([3, 1, 1, 1])
@@ -182,7 +182,7 @@ if cart:
     st.markdown("<hr style='margin: 0.5rem 0 1.5rem 0;'>", unsafe_allow_html=True)
     
     # Discount Section
-    st.subheader("💸 Discount (Optional)")
+    st.subheader("Discount (Optional)")
     col_disc1, col_disc2 = st.columns(2)
     
     with col_disc1:
@@ -225,7 +225,7 @@ if cart:
     st.divider()
 
     # Document Details Selection
-    st.subheader("📄 Document Details")
+    st.subheader("Document Details")
     col_doc1, col_doc2 = st.columns(2)
     with col_doc1:
         invoice_heading = st.selectbox("Document Heading", ["TAX INVOICE", "RETAIL INVOICE", "INVOICE", "BILL OF SUPPLY"], key="invoice_heading")
@@ -235,15 +235,15 @@ if cart:
     # Resulting Buttons
     col_clear, col_spacer = st.columns([1, 3])
     with col_clear:
-         if st.button("🗑️ Clear Cart"):
+         if st.button("Clear Cart"):
             st.session_state.cart = []
             st.rerun()
 
     # Bill Preview Section
     st.divider()
-    with st.expander("👁️ Preview Bill", expanded=True):
+    with st.expander("Preview Document", expanded=True):
         if not customer_name:
-            st.info("ℹ️ Enter Customer Name to generate a complete preview.")
+            st.info("Enter Customer Name to generate a complete preview.")
         else:
             # Use the selected payment method and heading in preview
             preview_html = generate_bill_html(cart, subtotal, discount_amount, discount_type, total, 
@@ -251,14 +251,14 @@ if cart:
             components.html(preview_html, height=600, scrolling=True)
             
     st.divider()
-    st.subheader("🚀 Actions")
+    st.subheader("Actions")
     
     col_act1, col_act2 = st.columns(2)
     
     with col_act1:
-        if st.button("📄 Generate Quote / Proforma", use_container_width=True):
+        if st.button("Generate Quote / Proforma", use_container_width=True):
             if not customer_name or customer_name.strip() == "":
-                st.error("⚠️ Customer name required for quotation!")
+                st.error("Customer name required for quotation.")
             else:
                 try:
                     import os
@@ -287,18 +287,18 @@ if cart:
                     generate_bill_pdf(pdf_name, cart, subtotal, discount_amount, discount_type, total, 
                                      customer_name, customer_phone, "", "PROFORMA INVOICE / QUOTATION")
                     
-                    st.success(f"✅ Quotation Generated!")
+                    st.success(f"Quotation Generated!")
                     
                     with open(pdf_name, "rb") as f:
-                        st.download_button("⬇️ Download Quote", f, file_name=f"quote_{quote_id}.pdf", mime="application/pdf")
+                        st.download_button("Download Quote", f, file_name=f"quote_{quote_id}.pdf", mime="application/pdf")
                         
                 except Exception as e:
-                    st.error(f"❌ Error: {e}")
+                    st.error("An error occurred while generating the quotation.")
 
     with col_act2:
-        if st.button(f"✅ Generate {invoice_heading.title()}", type="primary", use_container_width=True):
+        if st.button(f"Generate {invoice_heading.title()}", type="primary", use_container_width=True):
             if not customer_name or customer_name.strip() == "":
-                st.error("⚠️ Please enter customer name before generating bill!")
+                st.error("Please enter customer name before generating the document.")
             else:
                 try:
                     import os
@@ -381,9 +381,9 @@ if cart:
                     st.rerun()
                         
                 except Exception as e:
-                    st.error(f"❌ Error generating bill: {e}")
-                    import traceback
-                    st.code(traceback.format_exc())
+                    st.error("An error occurred while generating the document. Please verify all inputs and try again.")
+                    # Log internally instead of exposing the stack trace to the user
+                    print(f"Error generating document: {e}")
 
 else:
     st.info("Cart is empty. Add items to get started!")
