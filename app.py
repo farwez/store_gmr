@@ -3,7 +3,7 @@ from firebase_config import db
 from datetime import datetime, timedelta
 import time
 import pandas as pd
-from utils import inject_custom_css, render_sidebar, get_ist_time, verify_user, create_user, hash_password
+from utils import inject_custom_css, render_sidebar, get_ist_time, verify_user, create_user, hash_password, enforce_login_and_restore
 import json
 
 # must be first
@@ -11,57 +11,12 @@ st.set_page_config(page_title="Store Management Dashboard", layout="wide", page_
 inject_custom_css()
 
 # ==================== SESSION PERSISTENCE ====================
-# JavaScript to handle localStorage for persistent login
-st.markdown("""
-<script>
-    const session = localStorage.getItem('gmr_auth_session');
-    if (session) {
-        const data = JSON.parse(session);
-        const now = new Date().getTime();
-        if (now < data.expiry) {
-            // Fill the hidden input that Streamlit can see
-            const input = window.parent.document.querySelector('input[aria-label="session_restorer"]');
-            if (input) {
-                input.value = session;
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-                // Trigger Enter to submit the value
-                input.dispatchEvent(new KeyboardEvent('keydown', { 'key': 'Enter', 'bubbles': true }));
-            }
-        }
-    }
-</script>
-""", unsafe_allow_html=True)
+enforce_login_and_restore()
 
-# Hidden input for the JS to fill (Completely invisible)
-st.markdown("""
-    <style>
-        div[data-testid="stTextInput"]:has(input[aria-label="session_restorer"]) {
-            position: fixed !important;
-            top: -100px !important;
-            left: -100px !important;
-            width: 0 !important;
-            height: 0 !important;
-            overflow: hidden !important;
-            visibility: hidden !important;
-        }
-    </style>
-""", unsafe_allow_html=True)
-restored_session = st.text_input("session_restorer", label_visibility="collapsed", key="restore_token")
-
-# Logic to handle the restored session
-if restored_session and not st.session_state.get("authenticated"):
-    try:
-        data = json.loads(restored_session)
-        st.session_state["authenticated"] = True
-        st.session_state["username"] = data["username"]
-        st.session_state["user_name"] = data.get("name", data["username"])
-        st.rerun()
-    except:
-        pass
 
 # Helper to save session to localStorage
 def save_persistent_session(username, name=""):
-    expiry = (datetime.now() + timedelta(days=7)).timestamp() * 1000
+    expiry = (datetime.now() + timedelta(days=30)).timestamp() * 1000
     session_data = json.dumps({"username": username, "expiry": expiry})
     st.markdown(f"""
         <script>
