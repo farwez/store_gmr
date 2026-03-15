@@ -7,11 +7,13 @@ from utils import (
     render_sidebar, 
     generate_thermal_bill_html, 
     trigger_thermal_print,
-    build_whatsapp_message
+    build_whatsapp_message,
+    check_auth
 )
 
-st.set_page_config(page_title="Sales History", layout="wide", page_icon="📜")
+st.set_page_config(page_title="Sales History", layout="wide", initial_sidebar_state="expanded", page_icon="📜")
 inject_custom_css()
+check_auth()
 render_sidebar()
 
 st.title("📜 Sales History")
@@ -345,3 +347,4 @@ if sales_data and (end_date - start_date).days > 0:
     with col_chart2:
         st.write("**Revenue by Date**")
         st.bar_chart(df_chart.set_index("Date")["Revenue"])
+
