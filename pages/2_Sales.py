@@ -11,13 +11,15 @@ from utils import (
     generate_bill_html,
     get_ist_time,
     generate_thermal_bill_html,
-    trigger_thermal_print
+    trigger_thermal_print,
+    check_auth
 )
 import streamlit.components.v1 as components
 from datetime import datetime
 
 st.set_page_config(page_title="New Sale", layout="wide", page_icon="🛒", initial_sidebar_state="expanded")
 inject_custom_css()
+check_auth()
 render_sidebar()
 
 # Handle Reset Trigger (Must be before widgets are cleared)
