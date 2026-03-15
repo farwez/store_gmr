@@ -2,10 +2,11 @@ import streamlit as st
 from firebase_config import db, firestore_module
 from datetime import datetime, timedelta
 import pandas as pd
-from utils import inject_custom_css, render_sidebar
+from utils import inject_custom_css, render_sidebar, check_auth
 
-st.set_page_config(page_title="Returns & Exchanges", layout="wide", page_icon="↩️")
+st.set_page_config(page_title="Returns & Exchanges", layout="wide", initial_sidebar_state="expanded", page_icon="↩️")
 inject_custom_css()
+check_auth()
 render_sidebar()
 
 st.title("🔄 Returns & Exchanges")
@@ -264,3 +265,4 @@ with tab2:
         
         except Exception as e:
             st.error(f"Error loading returns: {e}")
+
