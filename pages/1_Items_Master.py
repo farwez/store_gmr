@@ -1,10 +1,11 @@
 import streamlit as st
 from firebase_config import db
 import pandas as pd
-from utils import inject_custom_css, render_sidebar, clear_items_cache
+from utils import inject_custom_css, render_sidebar, clear_items_cache, check_auth
 
-st.set_page_config(page_title="Items Master", layout="wide", page_icon="📦")
+st.set_page_config(page_title="Items Master", layout="wide", initial_sidebar_state="expanded", page_icon="📦")
 inject_custom_css()
+check_auth()
 render_sidebar()
 st.title("📦 Items Master")
 
@@ -165,3 +166,4 @@ with tab2:
     
     except Exception as e:
         st.error(f"❌ Error loading items: {e}")
+
