@@ -57,14 +57,73 @@ def create_user(username, password, name=""):
     except Exception as e:
         return False, str(e)
 
+def enforce_login_and_restore():
+    if not st.session_state.get("authenticated", False):
+        st.markdown("""
+        <script>
+            setTimeout(() => {
+                const session = localStorage.getItem('gmr_auth_session');
+                if (session) {
+                    const data = JSON.parse(session);
+                    const now = new Date().getTime();
+                    if (now < data.expiry) {
+                        const inputs = window.parent.document.querySelectorAll('input[aria-label="session_restorer"]');
+                        if (inputs.length > 0) {
+                            const input = inputs[inputs.length - 1];
+                            if (input.value !== session) {
+                                input.value = session;
+                                input.dispatchEvent(new Event('input', { bubbles: true }));
+                                input.dispatchEvent(new KeyboardEvent('keydown', { 'key': 'Enter', 'bubbles': true }));
+                            }
+                        }
+                    }
+                }
+            }, 300);
+        </script>
+        """, unsafe_allow_html=True)
+
+        st.markdown("""
+            <style>
+                div[data-testid="stTextInput"]:has(input[aria-label="session_restorer"]) {
+                    position: fixed !important;
+                    top: -100px !important;
+                    left: -100px !important;
+                    width: 0 !important;
+                    height: 0 !important;
+                    overflow: hidden !important;
+                    visibility: hidden !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+        
+        # We use a unique key per run, or a static key. We'll use static key that gets cleared if needed.
+        restored_session = st.text_input("session_restorer", label_visibility="collapsed", key="restore_token")
+        
+        if restored_session and not st.session_state.get("authenticated"):
+            try:
+                import json
+                data = json.loads(restored_session)
+                st.session_state["authenticated"] = True
+                st.session_state["username"] = data["username"]
+                st.session_state["user_name"] = data.get("name", data["username"])
+                st.rerun()
+            except:
+                pass
+        return False
+    return True
+
 def check_auth(quiet=False):
     """Check if user is authenticated and handle role-based redirection."""
-    # The session persistence is handled at the app level to avoid cycles
+    auth_restored = enforce_login_and_restore()
     if not st.session_state.get("authenticated", False):
         if not quiet:
             st.warning("⚠️ Access Denied. Please login.")
-            if st.button("Go to Login"):
-                st.switch_page("app.py")
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                if st.button("Go to Login", type="primary"):
+                    st.switch_page("app.py")
             st.stop()
         return False
     return True
