@@ -1,139 +1,184 @@
 import streamlit as st
+import pandas as pd
+import io
+import plotly.express as px
 from firebase_config import db
 from datetime import datetime, timedelta
-import pandas as pd
-from utils import inject_custom_css, render_sidebar, get_ist_time, check_admin
+from utils import inject_custom_css, render_sidebar, get_ist_time, check_admin, clear_dashboard_cache
 
-st.set_page_config(page_title="Expense Tracker", page_icon="💸", layout="wide")
+st.set_page_config(page_title="Expense Tracker", page_icon="💸", layout="wide", initial_sidebar_state="expanded")
 inject_custom_css()
 render_sidebar()
 check_admin()
 
-st.title("💸 Daily Expense Tracker")
-st.markdown("Record daily shop expenses like rent, salaries, tea, and electricity to calculate true net profit.")
-st.markdown("---")
+st.title("💸 Expense Tracker")
+st.caption("Record all daily shop expenses. These are deducted from your net profit in the dashboard.")
 
-# ==================== DATA FETCHING ====================
-@st.cache_data(ttl=60)
+# ═══════════════════════════════════════════════════════════════
+# DATA
+# ═══════════════════════════════════════════════════════════════
+CATEGORIES = [
+    "Rent & Lease",
+    "Staff Salaries / Wages",
+    "Electricity / Utilities",
+    "Tea / Snacks / Water",
+    "Transport / Delivery",
+    "Repairs & Maintenance",
+    "Packaging Materials",
+    "Marketing & Advertising",
+    "Purchase / Restock",
+    "Bank Charges / Fees",
+    "Other / Miscellaneous",
+]
+
+@st.cache_data(ttl=180, show_spinner=False)
 def fetch_expenses():
-    all_exp = db.collection("expenses").order_by("date", direction="DESCENDING").stream()
-    data = []
-    for exp in all_exp:
-        e_dict = exp.to_dict()
-        e_dict["id"] = exp.id
-        data.append(e_dict)
-    return data
+    docs = db.collection("expenses").order_by("date", direction="DESCENDING").stream()
+    rows = []
+    for d in docs:
+        dd = d.to_dict()
+        dd["_id"] = d.id
+        rows.append(dd)
+    return rows
+
+today_str   = get_ist_time().strftime("%Y-%m-%d")
+month_str   = get_ist_time().strftime("%Y-%m")
 
 try:
-    expenses_data = fetch_expenses()
-    
-    # Calculate MTDs
-    current_month = get_ist_time().strftime("%Y-%m")
-    current_day = get_ist_time().strftime("%Y-%m-%d")
-    
-    today_expense = sum(e["amount"] for e in expenses_data if e.get("date", "").startswith(current_day))
-    month_expense = sum(e["amount"] for e in expenses_data if e.get("date", "").startswith(current_month))
-    
-    # Top metrics
-    col_m1, col_m2, col_m3 = st.columns(3)
-    with col_m1:
-        st.metric("Today's Expenses", f"₹{today_expense:,.2f}")
-    with col_m2:
-        st.metric("This Month's Expenses", f"₹{month_expense:,.2f}")
-    with col_m3:
-        st.metric("Total Records", len(expenses_data))
-        
-    st.markdown("---")
-    
-    # ==================== UI WORKSPACE ====================
-    tab1, tab2 = st.tabs(["➕ Add New Expense", "📋 Expense History"])
-    
-    with tab1:
-        st.subheader("Record a New Expense")
-        
-        with st.form("add_expense_form", clear_on_submit=True):
-            col_f1, col_f2 = st.columns(2)
-            
-            with col_f1:
-                exp_date = st.date_input("Date", value=get_ist_time().date())
-                exp_category = st.selectbox("Category", [
-                    "Rent & Leases",
-                    "Staff Salaries/Wages",
-                    "Electricity / Utilities",
-                    "Tea / Snacks / Water",
-                    "Transport / Travel",
-                    "Repairs & Maintenance",
-                    "Packaging Materials",
-                    "Marketing / Ads",
-                    "Other / Misc"
-                ])
-                
-            with col_f2:
-                exp_amount = st.number_input("Amount (₹)", min_value=1.0, value=100.0, step=50.0)
-                exp_desc = st.text_input("Description / Notes", placeholder="E.g., Bought tea for staff")
-                
-            # Submit button
-            submitted = st.form_submit_button("💾 Save Expense", type="primary", use_container_width=True)
-            
-            if submitted:
-                new_exp = {
-                    "date": exp_date.strftime("%Y-%m-%d"),
-                    "category": exp_category,
-                    "amount": exp_amount,
-                    "description": exp_desc if exp_desc else "No description",
-                    "timestamp": get_ist_time()
-                }
-                
-                db.collection("expenses").add(new_exp)
-                st.cache_data.clear()
-                st.success("✅ Expense added successfully!")
-                st.rerun()
-
-    with tab2:
-        st.subheader("Expense History")
-        
-        if expenses_data:
-            # Filters
-            col_filt1, col_filt2 = st.columns(2)
-            with col_filt1:
-                filt_month = st.selectbox("Filter by Month", ["All Time", current_month], index=1)
-            with col_filt2:
-                categories = ["All Categories"] + list(set([e['category'] for e in expenses_data]))
-                filt_cat = st.selectbox("Filter by Category", categories)
-                
-            filtered_data = expenses_data
-            
-            if filt_month != "All Time":
-                filtered_data = [e for e in filtered_data if e.get("date", "").startswith(filt_month)]
-                
-            if filt_cat != "All Categories":
-                filtered_data = [e for e in filtered_data if e.get("category") == filt_cat]
-                
-            if filtered_data:
-                # Convert for display
-                df = pd.DataFrame(filtered_data)[["date", "category", "amount", "description"]]
-                df.columns = ["Date", "Category", "Amount (₹)", "Description"]
-                
-                # Format currency
-                df["Amount (₹)"] = df["Amount (₹)"].apply(lambda x: f"₹{x:,.2f}")
-                
-                st.dataframe(df, use_container_width=True, hide_index=True)
-                
-                # Breakdown Chart
-                st.markdown("#### Spend by Category")
-                cat_breakdown = pd.DataFrame(filtered_data).groupby("category")["amount"].sum().reset_index()
-                
-                import plotly.express as px
-                fig = px.pie(cat_breakdown, values="amount", names="category", hole=0.4)
-                fig.update_layout(margin=dict(t=0, b=0, l=0, r=0))
-                st.plotly_chart(fig, use_container_width=True)
-                
-            else:
-                st.info("No expenses found matching the selected filters.")
-        else:
-            st.info("No expenses recorded yet. Switch to the 'Add New Expense' tab to get started.")
-
+    with st.spinner("Loading expenses..."):
+        all_expenses = fetch_expenses()
 except Exception as e:
-    st.error(f"Error loading Expense Tracker: {e}")
-    import traceback
-    st.code(traceback.format_exc())
+    st.error(f"Error loading expenses: {e}")
+    all_expenses = []
+
+today_total = sum(e["amount"] for e in all_expenses if e.get("date","").startswith(today_str))
+month_total = sum(e["amount"] for e in all_expenses if e.get("date","").startswith(month_str))
+
+# Top Metrics
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Today's Total",  f"₹{today_total:,.2f}")
+m2.metric("This Month",     f"₹{month_total:,.2f}")
+m3.metric("Total Records",  len(all_expenses))
+m4.metric("Last Updated",   get_ist_time().strftime("%I:%M %p"))
+
+st.markdown("---")
+
+tab1, tab2 = st.tabs(["➕ Add Expense", "📋 History & Analytics"])
+
+# ═══════════════════════════════════════════════════════════════
+# TAB 1 — ADD EXPENSE
+# ═══════════════════════════════════════════════════════════════
+with tab1:
+    st.subheader("Record New Expense")
+    with st.form("add_exp_form", clear_on_submit=True, enter_to_submit=False):
+        r1, r2 = st.columns(2)
+        with r1:
+            exp_date  = st.date_input("Date", value=get_ist_time().date())
+            exp_cat   = st.selectbox("Category", CATEGORIES)
+        with r2:
+            exp_amt   = st.number_input("Amount (₹) *", min_value=0.01, value=100.0, step=10.0, format="%.2f")
+            exp_desc  = st.text_input("Description / Notes", placeholder="e.g. Paid electricity bill for March")
+        exp_paid_to = st.text_input("Paid To (Vendor / Person)", placeholder="e.g. Ravi Kumar (Caterer)")
+
+        if st.form_submit_button("💾 Save Expense", type="primary", use_container_width=True):
+            try:
+                db.collection("expenses").add({
+                    "date":        exp_date.strftime("%Y-%m-%d"),
+                    "category":    exp_cat,
+                    "amount":      exp_amt,
+                    "description": exp_desc.strip() or "No description",
+                    "paid_to":     exp_paid_to.strip(),
+                    "recorded_by": st.session_state.get("username", "Admin"),
+                    "timestamp":   get_ist_time(),
+                })
+                fetch_expenses.clear()
+                clear_dashboard_cache()
+                st.toast(f"✅ ₹{exp_amt:,.2f} saved under '{exp_cat}'")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error saving: {e}")
+
+# ═══════════════════════════════════════════════════════════════
+# TAB 2 — HISTORY & ANALYTICS
+# ═══════════════════════════════════════════════════════════════
+with tab2:
+    st.subheader("Expense History")
+
+    if not all_expenses:
+        st.info("No expenses recorded yet.")
+    else:
+        # Filters
+        f1, f2, f3 = st.columns(3)
+        with f1:
+            period = st.selectbox("Period", ["Today", "This Month", "Last 30 Days", "All Time"])
+        with f2:
+            cat_opts = ["All Categories"] + CATEGORIES
+            flt_cat  = st.selectbox("Category", cat_opts)
+        with f3:
+            min_amt = st.number_input("Min Amount (₹)", min_value=0.0, value=0.0, step=50.0)
+
+        # Apply filters
+        filtered = all_expenses
+        if period == "Today":
+            filtered = [e for e in filtered if e.get("date","").startswith(today_str)]
+        elif period == "This Month":
+            filtered = [e for e in filtered if e.get("date","").startswith(month_str)]
+        elif period == "Last 30 Days":
+            cutoff = (get_ist_time() - timedelta(days=30)).strftime("%Y-%m-%d")
+            filtered = [e for e in filtered if e.get("date","") >= cutoff]
+        if flt_cat != "All Categories":
+            filtered = [e for e in filtered if e.get("category") == flt_cat]
+        if min_amt > 0:
+            filtered = [e for e in filtered if e.get("amount", 0) >= min_amt]
+
+        if not filtered:
+            st.warning("No expenses match the filters.")
+        else:
+            # Summary
+            total_filtered = sum(e["amount"] for e in filtered)
+            fs1, fs2, fs3 = st.columns(3)
+            fs1.metric("Total (Filtered)", f"₹{total_filtered:,.2f}")
+            fs2.metric("Records", len(filtered))
+            fs3.metric("Avg per Entry", f"₹{total_filtered/len(filtered):,.2f}")
+
+            st.divider()
+
+            # Table
+            df = pd.DataFrame(filtered)
+            display_cols = {
+                "date":        "Date",
+                "category":    "Category",
+                "amount":      "Amount (₹)",
+                "description": "Description",
+                "paid_to":     "Paid To",
+            }
+            available = {k: v for k, v in display_cols.items() if k in df.columns}
+            df_disp = df[list(available.keys())].rename(columns=available)
+            df_disp["Amount (₹)"] = df_disp["Amount (₹)"].apply(lambda x: f"₹{x:,.2f}")
+            st.dataframe(df_disp, use_container_width=True, hide_index=True)
+
+            # Category Breakdown Chart
+            st.divider()
+            st.markdown("#### Spend by Category")
+            try:
+                cat_df = pd.DataFrame(filtered).groupby("category")["amount"].sum().reset_index()
+                fig    = px.pie(cat_df, values="amount", names="category", hole=0.45,
+                                color_discrete_sequence=px.colors.qualitative.Bold)
+                fig.update_layout(margin=dict(t=20, b=0, l=0, r=0), legend=dict(orientation="h"))
+                st.plotly_chart(fig, use_container_width=True)
+            except:
+                pass
+
+            # Export
+            st.divider()
+            buf = io.BytesIO()
+            df_export = pd.DataFrame(filtered)
+            # Strip timezone from any datetime columns (Firestore timestamps are tz-aware)
+            for col in df_export.select_dtypes(include=["datetimetz"]).columns:
+                df_export[col] = df_export[col].dt.tz_localize(None)
+            df_export.to_excel(buf, index=False, sheet_name="Expenses")
+            buf.seek(0)
+            st.download_button("📥 Export to Excel", buf,
+                               file_name=f"expenses_{today_str}.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                               use_container_width=True)
