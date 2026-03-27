@@ -3,8 +3,7 @@ from firebase_config import db
 from datetime import datetime, timedelta
 import time
 import pandas as pd
-from utils import inject_custom_css, render_sidebar, get_ist_time, verify_user, create_user, hash_password, enforce_login_and_restore
-import json
+from utils import inject_custom_css, render_sidebar, get_ist_time, verify_user, create_user, enforce_login_and_restore, sign_session_data, get_dashboard_kpis, get_dashboard_alerts, get_recent_transactions, clear_dashboard_cache, get_settings
 
 # must be first
 st.set_page_config(page_title="Store Management Dashboard", layout="wide", page_icon="🏪", initial_sidebar_state="expanded")
@@ -13,91 +12,141 @@ inject_custom_css()
 # ==================== SESSION PERSISTENCE ====================
 enforce_login_and_restore()
 
-
-# Helper to save session to localStorage
-def save_persistent_session(username, name=""):
+def save_persistent_session(username, name="", role="user"):
     expiry = (datetime.now() + timedelta(days=30)).timestamp() * 1000
-    session_data = json.dumps({"username": username, "expiry": expiry})
+    session_data = {"username": username, "name": name, "role": role, "expiry": expiry}
+    signed_session = sign_session_data(session_data)
     st.markdown(f"""
         <script>
-            localStorage.setItem('gmr_auth_session', '{session_data}');
+            localStorage.setItem('gmr_auth_session', '{signed_session}');
         </script>
     """, unsafe_allow_html=True)
 
-# Check if we need to auto-login (from previous session)
+# ==================== FIRST-TIME SETUP ====================
 if not st.session_state.get("authenticated"):
-    users_count = db.collection("users").count().get()[0][0].value
-    if users_count == 0:
-        st.info("👋 Welcome! This is your first time setup. Please create an Admin account.")
-        with st.container():
-            st.subheader("🛠️ Initial Account Setup")
-            new_u = st.text_input("Username", key="init_u")
-            new_p = st.text_input("Password", type="password", key="init_p")
-            if st.button("Create Account", type="primary"):
-                if new_u and new_p:
-                    success, msg = create_user(new_u, new_p, name="Administrator")
-                    if success:
-                        st.success("Account created! Please login.")
-                        time.sleep(2)
-                        st.rerun()
-                    else:
-                        st.error(msg)
+    has_any_user = any(db.collection("users").limit(1).stream())
+    if not has_any_user:
+        st.info("👋 Welcome! First time setup — please create an Admin account.")
+        new_u = st.text_input("Username", key="init_u")
+        new_p = st.text_input("Password", type="password", key="init_p")
+        if st.button("Create Account", type="primary"):
+            if new_u and new_p:
+                success, msg = create_user(new_u, new_p, name="Administrator")
+                if success:
+                    st.success("Account created! Please login.")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error(msg)
         st.stop()
 
-# ==================== LOGIN / SIGNUP UI ====================
+# ==================== LOGIN UI ====================
 def login_screen():
-    if st.session_state.get("_redirect_to_login"):
+    if st.session_state.pop("_force_signin_mode", False):
         st.session_state["auth_mode"] = "Sign In"
-        st.session_state["_redirect_to_login"] = False
-        
-    with st.container():
-        st.markdown("""
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px 0;">
-                <div style="background: white; padding: 35px; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); width: 100%; max-width: 440px; border: 1px solid #eef2f6;">
-                    <div style="text-align: center; margin-bottom: 25px;">
-                        <h1 style="margin: 0; font-size: 26px; color: #1e293b; font-family: 'Outfit';">Welcome</h1>
-                        <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Sign in to continue</p>
-                    </div>
-        """, unsafe_allow_html=True)
 
-        mode = st.radio("Access Mode", ["Sign In", "Create New Account"], horizontal=True, label_visibility="collapsed", key="auth_mode")
-        
-        st.markdown("<div style='margin-top: 20px;'>", unsafe_allow_html=True)
-        
-        if mode == "Sign In":
-            u = st.text_input("Username", key="login_u")
-            p = st.text_input("Password", type="password", key="login_p")
-            remember = st.checkbox("Keep me logged in", value=True)
-            if st.button("Unlock Dashboard", use_container_width=True, type="primary"):
-                if u and p:
-                    user = verify_user(u, p)
-                    if user:
-                        st.session_state["authenticated"] = True
-                        st.session_state["username"] = user["username"]
-                        st.session_state["user_name"] = user["name"]
-                        if remember:
-                            save_persistent_session(u, user["name"])
-                        st.rerun()
-                    else:
-                        st.error("Invalid credentials.")
-        else:
-            su_u = st.text_input("Choose Username", key="su_u")
-            su_p = st.text_input("Set Password", type="password", key="su_p")
-            if st.button("Initialize Account", use_container_width=True):
-                if su_u and su_p:
-                    success, msg = create_user(su_u, su_p)
-                    if success:
-                        st.success("Account created!")
-                        time.sleep(2)
-                        st.session_state["_redirect_to_login"] = True
-                        st.rerun()
-                    else:
-                        st.error(msg)
-                        
-        st.markdown("""
+    settings = get_settings()
+    allow_self_signup = bool(settings.get("allow_self_signup", True))
+    
+    st.markdown("""
+        <style>
+        /* Center the radio buttons for login/signup */
+        div[role="radiogroup"] {
+            justify-content: center !important;
+            margin-bottom: 20px;
+        }
+        /* Make form elements full width and styled properly */
+        [data-testid="stForm"] {
+            background-color: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    with st.container():
+        # Layout hack for clean centering
+        c1, c2, c3 = st.columns([1, 1.2, 1])
+        with c2:
+            st.markdown("""
+                <div style="text-align:center; padding-top: 5vh; margin-bottom: 30px;">
+                    <div style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); width: 75px; height: 75px; border-radius: 22px; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; box-shadow: 0 10px 25px rgba(79, 70, 229, 0.4);">
+                        <span style="font-size: 38px;">🏪</span>
+                    </div>
+                    <h1 style="margin:0;font-size:32px;color:#1e293b;font-weight:800;letter-spacing:-0.5px;">Welcome Back</h1>
+                    <p style="color:#64748b;font-size:16px;margin-top:8px;">Sign in to manage your store securely.</p>
                 </div>
-            </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+
+            mode_options = ["Sign In"] + (["Create Account"] if allow_self_signup else [])
+            mode = st.radio("Mode", mode_options, horizontal=True, label_visibility="collapsed", key="auth_mode")
+
+            if mode == "Sign In":
+                with st.container(border=True):
+                    with st.form("login_form", clear_on_submit=False):
+                        st.markdown("<h4 style='margin-bottom:15px;color:#334155;'>Account Login</h4>", unsafe_allow_html=True)
+                        u = st.text_input("Username", key="login_u", placeholder="Enter your username")
+                        p = st.text_input("Password", type="password", key="login_p", placeholder="Enter your password")
+                        remember = st.checkbox("Keep me logged in for 30 days", value=True)
+                        
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        submitted = st.form_submit_button("Secure Login ➔", use_container_width=True, type="primary")
+                        
+                        if submitted:
+                            if u.strip() and p.strip():
+                                user = verify_user(u.strip(), p.strip())
+                                if user:
+                                    st.session_state["authenticated"] = True
+                                    st.session_state["username"] = user["username"]
+                                    st.session_state["user_name"] = user["name"]
+                                    st.session_state["user_role"] = user.get("role", "user")
+                                    if remember:
+                                        save_persistent_session(user["username"], user["name"], user.get("role", "user"))
+                                    st.success("Access Granted! Redirecting...")
+                                    time.sleep(0.5)
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Invalid username or password. Please try again.")
+                            else:
+                                st.warning("⚠️ Please enter both username and password.")
+            
+            else:
+                with st.container(border=True):
+                    with st.form("signup_form", clear_on_submit=False):
+                        st.markdown("<h4 style='margin-bottom:15px;color:#334155;'>Register Staff</h4>", unsafe_allow_html=True)
+                        su_n = st.text_input("Display Name", key="su_n", placeholder="E.g. John Doe", help="How your name will appear on the dashboard")
+                        su_u = st.text_input("Choose Username", key="su_u", placeholder="E.g. johndoe123")
+                        su_p = st.text_input("Set Password", type="password", key="su_p", placeholder="Minimum 6 characters")
+                        
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        submitted = st.form_submit_button("Create Account ✨", use_container_width=True, type="primary")
+                        
+                        if submitted:
+                            if not su_u.strip() or not su_p.strip():
+                                st.warning("⚠️ Username and password are required.")
+                            elif len(su_p.strip()) < 6:
+                                st.error("🔒 Password must be at least 6 characters for security.")
+                            else:
+                                with st.spinner("Creating account..."):
+                                    success, msg = create_user(su_u.strip(), su_p.strip(), name=(su_n.strip() or su_u.strip()), role="user")
+                                    if success:
+                                        st.success("🎉 Account created successfully! Switch to Sign In.")
+                                        time.sleep(1)
+                                        st.session_state["_force_signin_mode"] = True
+                                        st.rerun()
+                                    else:
+                                        st.error(f"❌ Registration Failed: {msg}")
+
+            if not allow_self_signup:
+                st.info("ℹ️ Account creation is restricted. Contact your administrator for access.")
+                
+            st.markdown("""
+                <div style="text-align:center;margin-top:25px;">
+                    <p style="color:#94a3b8;font-size:13px;">© 2026 Store Management System. All rights reserved.</p>
+                </div>
+            """, unsafe_allow_html=True)
+
     st.stop()
 
 if not st.session_state.get("authenticated"):
@@ -106,92 +155,92 @@ if not st.session_state.get("authenticated"):
 # ==================== MAIN DASHBOARD ====================
 render_sidebar()
 
+today_str = get_ist_time().strftime("%Y-%m-%d")
+current_month = get_ist_time().strftime("%Y-%m")
+
 st.markdown(f"""
-    <div style="background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); padding: 40px; border-radius: 24px; margin-bottom: 30px; color: white; box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);">
-        <h1 style="color: white !important; margin: 0; font-size: 32px; font-family: 'Outfit';">Dashboard</h1>
-        <p style="opacity: 0.9; margin-top: 10px; font-size: 16px;">Welcome back, {st.session_state.get('user_name', 'User')}</p>
+    <div style="background: white; padding: 28px 32px; border-radius: 16px; border: 1px solid #e2e8f0; margin-bottom: 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);">
+        <h1 style="color: #0f172a!important; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">Store Overview</h1>
+        <p style="color: #64748b; margin-top: 6px; font-size: 15px; margin-bottom: 0;">Welcome back, <b style="color:#0f172a">{st.session_state.get('user_name', 'Admin')}</b> &nbsp;•&nbsp; {get_ist_time().strftime('%A, %d %B %Y')}</p>
     </div>
 """, unsafe_allow_html=True)
 
-def today_string():
-    return get_ist_time().strftime("%Y-%m-%d")
-
-# ==================== QUICK STATS ====================
-st.subheader("Today's Overview", anchor=False)
-col1, col2, col3, col4 = st.columns(4)
+# ==================== TODAY'S KPI METRICS ====================
+dashboard_load_error = None
+try:
+    with st.spinner("Loading dashboard data..."):
+        kpi = get_dashboard_kpis(today_str)
+        alerts = get_dashboard_alerts()
+        rows = get_recent_transactions(limit=10)
+except Exception as e:
+    dashboard_load_error = str(e)
+    kpi = {"error": dashboard_load_error}
+    alerts = {"low_list": [], "outstanding": 0}
+    rows = []
 
 try:
-    today_sales = db.collection("sales").where("date", "==", today_string()).stream()
-    sales_list = [sale.to_dict() for sale in today_sales]
-    today_revenue = sum(sale.get("total", 0) for sale in sales_list)
-    today_orders = len(sales_list)
-    today_items_sold = sum(sum(item.get("qty", 0) for item in sale.get("items", [])) for sale in sales_list)
-    items_count = db.collection("items_master").count().get()[0][0].value
-    
-    with col1:
-        st.metric("Revenue", f"₹{today_revenue:,.0f}", f"{today_orders} orders")
-    with col2:
-        st.metric("Orders", today_orders, f"{today_items_sold} items")
-    with col3:
-        st.metric("Total Products", items_count, "In catalog")
-    with col4:
-        today_cost = sum(sum(item.get("cost", 0) * item.get("qty", 0) for item in sale.get("items", [])) for sale in sales_list)
-        today_profit = today_revenue - today_cost
-        st.metric("Profit", f"₹{today_profit:,.0f}", "Net")
+    if "error" in kpi:
+        st.error(f"Error loading KPIs: {kpi['error']}")
+    else:
+        k1, k2, k3, k4 = st.columns(4)
+        with k1:
+            st.metric("💰 Today's Sales", f"₹{kpi['gross_revenue']:,.0f}", f"{kpi['today_orders']} orders")
+        with k2:
+            st.metric("📦 Net Revenue", f"₹{kpi['net_revenue']:,.0f}", f"{kpi['returns_count']} returns", delta_color="inverse")
+        with k3:
+            st.metric("🧾 Expenses", f"₹{kpi['today_expenses']:,.0f}", "Store costs", delta_color="inverse")
+        with k4:
+            st.metric("📈 Net Profit", f"₹{kpi['net_profit']:,.0f}", "Est. Today")
 except Exception as e:
-    st.error(f"Error loading stats: {e}")
+    st.error(f"Error rendering Dashboard: {e}")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# ==================== QUICK ACTIONS ====================
-st.subheader("Quick Actions", anchor=False)
+# ==================== QUICK ACTIONS & ALERTS ====================
+col_left, col_right = st.columns([1.5, 1])
 
-# ROW 1
-r1c1, r1c2, r1c3 = st.columns(3)
-with r1c1:
-    if st.button("New Sale", use_container_width=True, type="primary"):
-        st.switch_page("pages/2_Sales.py")
-with r1c2:
-    if st.button("Inventory Master", use_container_width=True):
-        st.switch_page("pages/1_Items_Master.py")
-with r1c3:
-    if st.button("Credit Book", use_container_width=True):
-        st.switch_page("pages/4_Credit_Book.py")
+with col_left:
+    st.markdown("<h4 style='color:#1e293b; margin-bottom:16px;'>⚡ Quick Actions</h4>", unsafe_allow_html=True)
+    q1, q2 = st.columns(2)
+    with q1:
+        if st.button("🛒 New Sale", use_container_width=True, type="primary"): st.switch_page("pages/2_Sales.py")
+        if st.button("📙 Credit Book", use_container_width=True): st.switch_page("pages/4_Credit_Book.py")
+    with q2:
+        if st.button("📦 Item Master", use_container_width=True): st.switch_page("pages/1_Items_Master.py")
+        if st.button("💸 Expenses", use_container_width=True): st.switch_page("pages/6_Expense_Tracker.py")
 
-# ROW 2
-r2c1, r2c2, r2c3 = st.columns(3)
-with r2c1:
-    if st.button("Expense Tracker", use_container_width=True):
-        st.switch_page("pages/6_Expense_Tracker.py")
-with r2c2:
-    if st.button("Sales History", use_container_width=True):
-        st.switch_page("pages/7_Sales_History.py")
-with r2c3:
-    if st.button("Reports & Analytics", use_container_width=True):
-        st.switch_page("pages/3_Reports.py")
-
-st.markdown("---")
-
-# ==================== RECENT SALES ====================
-st.subheader("Recent Sales")
-try:
-    recent_sales = db.collection("sales").order_by("timestamp", direction="DESCENDING").limit(10).stream()
-    sales_data = []
-    for sale in recent_sales:
-        data = sale.to_dict()
-        sales_data.append({
-            "Date": data.get("date", "N/A"),
-            "Customer": data.get("customer_name", "N/A"),
-            "Items": len(data.get("items", [])),
-            "Total": f"₹{data.get('total', 0):,.0f}",
-            "Time": data.get("timestamp", get_ist_time()).strftime("%I:%M %p") if isinstance(data.get("timestamp"), datetime) else "N/A"
-        })
-    if sales_data:
-        st.dataframe(pd.DataFrame(sales_data), use_container_width=True, hide_index=True)
+with col_right:
+    st.markdown("<h4 style='color:#1e293b; margin-bottom:16px;'>🔔 Alerts</h4>", unsafe_allow_html=True)
+    
+    # Outstanding Credit Alert
+    outstanding = alerts["outstanding"]
+    if outstanding > 0:
+        st.warning(f"**₹{outstanding:,.0f}** outstanding debt.")
     else:
-        st.info("📭 No sales yet.")
-except Exception as e:
-    st.error(f"Error loading recent sales: {e}")
+        st.success("No outstanding credit! 🎉")
+        
+    # Low Stock Alert
+    low_list = alerts["low_list"]
+    if low_list:
+        with st.expander(f"⚠️ {len(low_list)} items low on stock", expanded=True):
+            for name, stk in low_list[:5]:  # Show top 5 to keep it clean
+                color = "#ef4444" if stk == 0 else "#f97316"
+                st.markdown(f"<div style='display:flex;justify-content:space-between;font-size:14px;padding:4px 0;border-bottom:1px solid #f1f5f9;'><span style='color:#334155'>{name}</span><b style='color:{color}'>{stk} left</b></div>", unsafe_allow_html=True)
+            if len(low_list) > 5:
+                st.caption(f"+ {len(low_list)-5} more items...")
+    else:
+        st.success("Stock levels are healthy.")
 
-# FOOTER
-st.caption(f"🕐 Last updated: {get_ist_time().strftime('%I:%M:%S %p')}")
+st.markdown("<br>", unsafe_allow_html=True)
+
+# ==================== RECENT TRANSACTIONS ====================
+st.markdown("<h4 style='color:#1e293b; margin-bottom:16px;'>📜 Recent Transactions</h4>", unsafe_allow_html=True)
+try:
+    if rows:
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    else:
+        st.info("📭 No sales yet today.")
+except Exception as e:
+    st.error(f"Error loading transactions: {e}")
+
+st.caption(f"🕐 Last refreshed: {get_ist_time().strftime('%I:%M:%S %p')} IST")
