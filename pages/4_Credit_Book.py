@@ -1,192 +1,197 @@
 import streamlit as st
 from firebase_config import db
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
-from utils import inject_custom_css, render_sidebar, get_ist_time, check_admin
 import urllib.parse
+from utils import inject_custom_css, render_sidebar, get_ist_time, check_admin, get_settings, clear_dashboard_cache
 
-st.set_page_config(page_title="Credit Book", page_icon="📙", layout="wide")
+st.set_page_config(page_title="Credit Book", page_icon="📙", layout="wide", initial_sidebar_state="expanded")
 inject_custom_css()
 render_sidebar()
 check_admin()
 
-st.title("📙 Customer Credit Book")
-st.markdown("Track unpaid balances (Udhaar) and receive payments.")
-st.markdown("---")
+st.title("📙 Credit Book")
+st.caption("Manage customer dues (Udhaar). Record repayments and send WhatsApp reminders.")
 
-# 1. Fetch Sales that were "Credit/Due"
-@st.cache_data(ttl=60)
-def fetch_credit_data():
-    all_sales = db.collection("sales").where("payment_method", "==", "Credit/Due").stream()
-    all_payments = db.collection("credit_payments").stream()
-    
+# ═══════════════════════════════════════════════════════════════
+# DATA LAYER
+# ═══════════════════════════════════════════════════════════════
+@st.cache_data(ttl=180, show_spinner=False)
+def get_credit_summary():
+    """
+    Returns a dict { customer_key: {name, phone, total_credit, total_paid, balance, last_date} }
+    Optimized to avoid Firestore composite index requirement while maintaining speed.
+    """
     customers = {}
     
-    # Process Credit Sales
-    for sale in all_sales:
-        data = sale.to_dict()
-        name = data.get("customer_name", "Unknown").strip()
-        phone = data.get("customer_phone", "").strip()
-        total = data.get("total", 0)
+    # Fetch credit sales. Sorting is done in Python to avoid needing a Firestore composite index.
+    credit_sales = db.collection("sales") \
+                     .where("payment_method", "in", ["Credit / Due", "Credit/Due"]) \
+                     .stream()
+                     
+    for doc in credit_sales:
+        d = doc.to_dict()
+        if d.get("voided", False): continue
         
-        # Unique customer key (name + phone)
-        cust_key = f"{name}_{phone}"
+        name = d.get("customer_name", "Unknown").strip()
+        phone = d.get("customer_phone", "").strip()
+        key = f"{name.lower()}_{phone}"
         
-        if cust_key not in customers:
-            customers[cust_key] = {
-                "name": name,
-                "phone": phone,
-                "total_credit": 0,
-                "total_paid": 0,
-                "balance": 0,
-                "last_purchase_date": data.get("date", "")
+        if key not in customers:
+            customers[key] = {
+                "name": name, 
+                "phone": phone, 
+                "total_credit": 0, 
+                "total_paid": 0, 
+                "last_date": d.get("date", "")
             }
         
-        customers[cust_key]["total_credit"] += total
-        # keep the most recent purchase date
-        sale_date = data.get("date", "")
-        if sale_date > customers[cust_key]["last_purchase_date"]:
-            customers[cust_key]["last_purchase_date"] = sale_date
-            
-    # Process Repayments
-    for pmt in all_payments:
-        data = pmt.to_dict()
-        name = data.get("customer_name", "").strip()
-        phone = data.get("customer_phone", "").strip()
-        amount = data.get("amount", 0)
-        
-        cust_key = f"{name}_{phone}"
-        if cust_key in customers:
-             customers[cust_key]["total_paid"] += amount
-             
-    # Calculate Balance
-    active_credits = []
-    for k, v in customers.items():
-        balance = v["total_credit"] - v["total_paid"]
-        v["balance"] = balance
-        if balance > 0:
-            active_credits.append(v)
-            
-    return active_credits
+        customers[key]["total_credit"] += d.get("total", 0)
+        # Update last_date if this sale is newer
+        if d.get("date", "") > customers[key]["last_date"]:
+            customers[key]["last_date"] = d.get("date", "")
 
+    # 2. Fetch all repayments
+    repayments = db.collection("credit_payments").stream()
+    for doc in repayments:
+        d = doc.to_dict()
+        name = d.get("customer_name", "").strip()
+        phone = d.get("customer_phone", "").strip()
+        key = f"{name.lower()}_{phone}"
+        if key in customers:
+            customers[key]["total_paid"] += d.get("amount", 0)
+
+    # 3. Calculate final balances
+    result = []
+    for c in customers.values():
+        c["balance"] = max(0, c["total_credit"] - c["total_paid"])
+        if c["balance"] > 1:
+            result.append(c)
+            
+    # Sort by balance descending (highest dues first)
+    result.sort(key=lambda x: x["balance"], reverse=True)
+    return result
+
+# ═══════════════════════════════════════════════════════════════
+# METRICS BAR
+# ═══════════════════════════════════════════════════════════════
 try:
-    with st.spinner("Loading credit records..."):
-         credit_records = fetch_credit_data()
-         
-    if not credit_records:
-        st.success("🎉 No outstanding credit! All customers have paid.")
-        st.stop()
-        
-    # Calculate overall metrics
-    total_outstanding = sum(c["balance"] for c in credit_records)
-    total_customers_due = len(credit_records)
-    
-    col_met1, col_met2, col_met3 = st.columns(3)
-    with col_met1:
-        st.metric("₹ Total Outstanding", f"₹{total_outstanding:,.2f}")
-    with col_met2:
-        st.metric("👥 Customers with Dues", total_customers_due)
-    with col_met3:
-        st.metric("📅 Last Updated", get_ist_time().strftime("%I:%M %p"))
-        
-    st.markdown("---")
-    
-    # Search and Filter
-    col_search, col_space = st.columns([1, 2])
-    with col_search:
-        search_query = st.text_input("🔍 Search Customer", placeholder="Name or Phone...")
-    
-    if search_query:
-        query_lower = search_query.lower()
-        filtered_records = [
-            c for c in credit_records 
-            if query_lower in c['name'].lower() or query_lower in c['phone']
-        ]
-    else:
-        filtered_records = credit_records
-        
-    filtered_records.sort(key=lambda x: x['balance'], reverse=True) # Sort by largest due first
+    with st.spinner("Loading credit summary..."):
+        records = get_credit_summary()
 
-    st.subheader("📋 Active Credit Accounts")
-    
-    for record in filtered_records:
-        st.markdown(f"""
-            <div style='background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 15px;'>
-                <div style='display: flex; justify-content: space-between; align-items: center;'>
-                    <div>
-                        <h4 style='margin: 0; color: #1e293b;'>{record['name']}</h4>
-                        <div style='color: #64748b; font-size: 14px; margin-top: 5px;'>📞 {record['phone'] if record['phone'] else 'No Phone'}</div>
-                        <div style='color: #64748b; font-size: 13px; margin-top: 2px;'>📅 Last Purchase: {record['last_purchase_date']}</div>
-                    </div>
-                    <div style='text-align: right;'>
-                        <div style='font-size: 12px; color: #64748b;'>Outstanding Balance</div>
-                        <div style='color: #ef4444; font-size: 24px; font-weight: bold;'>₹{record['balance']:,.2f}</div>
-                    </div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        col_act1, col_act2, col_act3 = st.columns([1, 1, 2])
-        with col_act1:
-            if st.button(f"💰 Receive Payment", key=f"pay_{record['name']}_{record['phone']}", use_container_width=True):
-                st.session_state[f"show_payment_modal_{record['name']}"] = True
-                
-        with col_act2:
-            if record['phone']:
-                from utils import get_settings
-                store_name = get_settings().get("store_name", "GMR STORE").upper()
-                msg = f"*Important Update off {store_name}*\n\n"
-                msg += f"Dear {record['name']},\n"
-                msg += f"Your pending balance is *₹{record['balance']:,.2f}*.\n"
-                msg += f"Kindly arrange for the payment at your earliest convenience.\n"
-                msg += "Thank you!"
-                
-                # Format Indian number if needed
-                ph = record['phone']
-                if not ph.startswith("+91") and len(ph) == 10:
-                    ph = "+91" + ph
-                    
-                wa_link = f"https://wa.me/{ph.replace('+', '')}?text={urllib.parse.quote(msg)}"
-                st.link_button("📲 Send Reminder", wa_link, use_container_width=True)
-        
-        # Payment Form pop-in logic
-        if st.session_state.get(f"show_payment_modal_{record['name']}", False):
-            with st.container():
-                st.markdown("<div style='background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #cbd5e1; margin-top: 5px;'>", unsafe_allow_html=True)
-                st.markdown(f"**Receive Payment from {record['name']}**")
-                
-                form_col1, form_col2 = st.columns(2)
-                with form_col1:
-                    pay_amount = st.number_input("Amount Received (₹)", min_value=1.0, max_value=float(record['balance']), value=float(record['balance']), key=f"amt_{record['name']}")
-                with form_col2:
-                    pay_method = st.selectbox("Payment Method", ["Cash", "UPI", "Card", "Bank Transfer"], key=f"meth_{record['name']}")
-                
-                submit_col1, submit_col2 = st.columns(2)
-                with submit_col1:
-                    if st.button("✅ Confirm Payment", type="primary", key=f"conf_{record['name']}", use_container_width=True):
-                        # Save payment
-                        pmt_data = {
-                            "customer_name": record['name'],
-                            "customer_phone": record['phone'],
-                            "amount": pay_amount,
-                            "payment_method": pay_method,
-                            "date": get_ist_time().strftime("%Y-%m-%d"),
-                            "timestamp": get_ist_time()
-                        }
-                        db.collection("credit_payments").add(pmt_data)
-                        st.cache_data.clear()
-                        st.session_state[f"show_payment_modal_{record['name']}"] = False
-                        st.toast("✅ Payment Recorded Successfully!")
+    if not records:
+        st.success("🎉 Great news — no outstanding dues! All credit customers have paid.")
+        st.stop()
+
+    total_outstanding = sum(r["balance"] for r in records)
+    m1, m2, m3 = st.columns(3)
+    m1.metric("💰 Total Outstanding", f"₹{total_outstanding:,.2f}")
+    m2.metric("👥 Credit Customers", len(records))
+    m3.metric("📅 As of", get_ist_time().strftime("%d %b %Y, %I:%M %p"))
+
+    st.markdown("---")
+
+    # Search
+    sq = st.text_input("🔍 Search by name or phone", placeholder="Type to filter…")
+    if sq:
+        records = [r for r in records if sq.lower() in r["name"].lower() or sq in r["phone"]]
+
+    # ═══════════════════════════════════════════════════════════════
+    # CUSTOMER CARDS
+    # ═══════════════════════════════════════════════════════════════
+    store_name = get_settings().get("store_name", "Our Store")
+
+    for idx, rec in enumerate(records):
+        bal   = rec["balance"]
+        paid  = rec["total_paid"]
+        total = rec["total_credit"]
+        pct   = int((paid / total * 100)) if total > 0 else 0
+
+        with st.container(border=True):
+            hdr1, hdr2 = st.columns([4, 2])
+            with hdr1:
+                st.markdown(f"### {rec['name']}")
+                st.caption(f"📞 {rec['phone'] or 'No phone'} &nbsp; | &nbsp; 🗓 Last purchase: {rec['last_date']}")
+                st.progress(pct, text=f"Paid ₹{paid:,.0f} of ₹{total:,.0f} ({pct}%)")
+            with hdr2:
+                color = "#dc2626" if bal > 5000 else "#ea580c" if bal > 1000 else "#92400e"
+                st.markdown(f"<div style='text-align:right;'><div style='font-size:13px;color:#64748b;'>Outstanding Balance</div><div style='font-size:28px;font-weight:700;color:{color};'>₹{bal:,.2f}</div></div>", unsafe_allow_html=True)
+
+            st.divider()
+            ac1, ac2, ac3 = st.columns(3)
+
+            # RECEIVE PAYMENT BUTTON
+            with ac1:
+                if st.button("💰 Receive Payment", key=f"pay_{idx}", use_container_width=True, type="primary"):
+                    st.session_state[f"payment_modal_{idx}"] = not st.session_state.get(f"payment_modal_{idx}", False)
+
+            # WHATSAPP REMINDER
+            with ac2:
+                if rec["phone"] and len(rec["phone"]) >= 10:
+                    ph  = rec["phone"].replace(" ", "").replace("-", "")
+                    if not ph.startswith("91") and len(ph) == 10: ph = "91" + ph
+                    msg = (f"*{store_name}* — Payment Reminder\n\n"
+                           f"Dear *{rec['name']}*,\n"
+                           f"Your outstanding balance is *₹{bal:,.2f}*.\n"
+                           f"Total credit: ₹{total:,.2f} | Paid: ₹{paid:,.2f}\n\n"
+                           f"Please arrange payment at your earliest convenience.\nThank you! 🙏")
+                    wa = f"https://wa.me/{ph}?text={urllib.parse.quote(msg)}"
+                    st.link_button("📲 WhatsApp Reminder", wa, use_container_width=True)
+                else:
+                    st.button("📲 No Phone", disabled=True, use_container_width=True)
+
+            # VIEW HISTORY
+            with ac3:
+                if st.button("📜 View History", key=f"hist_{idx}", use_container_width=True):
+                    st.session_state[f"show_hist_{idx}"] = not st.session_state.get(f"show_hist_{idx}", False)
+
+            # PAYMENT FORM
+            if st.session_state.get(f"payment_modal_{idx}", False):
+                with st.container(border=True):
+                    st.markdown(f"**Record Payment from {rec['name']}**")
+                    pf1, pf2 = st.columns(2)
+                    with pf1:
+                        pay_amt  = st.number_input("Amount Received (₹)", min_value=0.01, max_value=float(bal), value=float(bal), key=f"pamt_{idx}", format="%.2f")
+                    with pf2:
+                        pay_meth = st.selectbox("Mode", ["Cash", "UPI / GPay", "Bank Transfer", "Cheque"], key=f"pmeth_{idx}")
+                    pay_note = st.text_input("Notes (optional)", key=f"pnote_{idx}")
+
+                    ps, pc = st.columns(2)
+                    if ps.button("✅ Confirm Payment", key=f"pconf_{idx}", type="primary", use_container_width=True):
+                        db.collection("credit_payments").add({
+                            "customer_name":  rec["name"],
+                            "customer_phone": rec["phone"],
+                            "amount":         pay_amt,
+                            "payment_method": pay_meth,
+                            "notes":          pay_note,
+                            "date":           get_ist_time().strftime("%Y-%m-%d"),
+                            "timestamp":      get_ist_time(),
+                        })
+                        get_credit_summary.clear()
+                        clear_dashboard_cache()
+                        st.toast(f"✅ ₹{pay_amt:,.2f} recorded from {rec['name']}")
                         st.rerun()
-                with submit_col2:
-                    if st.button("❌ Cancel", key=f"canc_{record['name']}", use_container_width=True):
-                        st.session_state[f"show_payment_modal_{record['name']}"] = False
+                    if pc.button("Cancel", key=f"pcan_{idx}", use_container_width=True):
+                        st.session_state[f"payment_modal_{idx}"] = False
                         st.rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
-                
-        st.markdown("<br>", unsafe_allow_html=True)
+
+            # PAYMENT HISTORY
+            if st.session_state.get(f"show_hist_{idx}", False):
+                with st.container(border=True):
+                    st.markdown(f"**Payment history for {rec['name']}**")
+                    hist_docs = db.collection("credit_payments") \
+                        .where("customer_name", "==", rec["name"]) \
+                        .where("customer_phone", "==", rec["phone"]) \
+                        .order_by("date", direction="DESCENDING").stream()
+                    hist_rows = []
+                    for h in hist_docs:
+                        hd = h.to_dict()
+                        hist_rows.append({"Date": hd.get("date"), "Amount": f"₹{hd.get('amount',0):,.2f}", "Mode": hd.get("payment_method"), "Notes": hd.get("notes","")})
+                    if hist_rows:
+                        st.dataframe(pd.DataFrame(hist_rows), use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No payments recorded yet.")
 
 except Exception as e:
-    st.error(f"Error loading credit book: {e}")
-    import traceback
-    st.code(traceback.format_exc())
+    st.error(f"Error: {e}")
+    import traceback; st.code(traceback.format_exc())
