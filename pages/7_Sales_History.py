@@ -1,14 +1,12 @@
 import streamlit as st
-from firebase_config import db
-from datetime import datetime, timedelta
 import pandas as pd
+import io
+from firebase_config import db, firestore_module
+from datetime import datetime, timedelta
 from utils import (
-    inject_custom_css, 
-    render_sidebar, 
-    generate_thermal_bill_html, 
-    trigger_thermal_print,
-    build_whatsapp_message,
-    check_auth
+    inject_custom_css, render_sidebar, get_ist_time, check_auth,
+    generate_thermal_bill_html, trigger_thermal_print,
+    build_whatsapp_message, clear_items_cache, clear_dashboard_cache
 )
 
 st.set_page_config(page_title="Sales History", layout="wide", initial_sidebar_state="expanded", page_icon="📜")
@@ -17,334 +15,188 @@ check_auth()
 render_sidebar()
 
 st.title("📜 Sales History")
+st.caption("View, reprint, and void past sales. Export records to Excel for accounting.")
 
-# Date selection options
-st.subheader("📅 Select Date Range")
-
-col1, col2, col3 = st.columns([2, 2, 1])
-
-with col1:
-    view_mode = st.selectbox(
-        "View Mode",
-        ["Today", "Yesterday", "Last 7 Days", "Last 30 Days", "Custom Range"],
-        index=0  # Default to "Today"
-    )
-
-# Set dates based on view mode
-if view_mode == "Today":
-    start_date = datetime.now().date()
-    end_date = datetime.now().date()
-    st.info(f"📅 Showing sales for: **{start_date.strftime('%d-%m-%Y')}** (Today)")
-elif view_mode == "Yesterday":
-    start_date = (datetime.now() - timedelta(days=1)).date()
-    end_date = (datetime.now() - timedelta(days=1)).date()
-    st.info(f"📅 Showing sales for: **{start_date.strftime('%d-%m-%Y')}** (Yesterday)")
-elif view_mode == "Last 7 Days":
-    end_date = datetime.now().date()
-    start_date = end_date - timedelta(days=7)
-    st.info(f"📅 Showing sales from: **{start_date.strftime('%d-%m-%Y')}** to **{end_date.strftime('%d-%m-%Y')}**")
-elif view_mode == "Last 30 Days":
-    end_date = datetime.now().date()
-    start_date = end_date - timedelta(days=30)
-    st.info(f"📅 Showing sales from: **{start_date.strftime('%d-%m-%Y')}** to **{end_date.strftime('%d-%m-%Y')}**")
-else:  # Custom Range
-    col_date1, col_date2 = st.columns(2)
-    with col_date1:
-        start_date = st.date_input("Start Date", value=datetime.now().date())
-    with col_date2:
-        end_date = st.date_input("End Date", value=datetime.now().date())
-
-st.markdown("---")
-
-# Fetch and display sales
-try:
-    with st.spinner("Loading sales..."):
-        # Fetch all sales
-        all_sales = db.collection("sales").stream()
-        sales_data = []
-        
-        for sale in all_sales:
-            data = sale.to_dict()
-            sale_date_str = data.get("date", "")
-            
-            # Parse date
-            try:
-                sale_date = datetime.strptime(sale_date_str, "%Y-%m-%d").date()
-            except:
-                continue
-            
-            # Filter by date range
-            if start_date <= sale_date <= end_date:
-                # Get items details
-                items = data.get("items", [])
-                items_str = ", ".join([f"{item.get('name', 'Unknown')} x{item.get('qty', 0)}" for item in items])
-                
-                # Get discount info
-                discount_amount = data.get("discount_amount", 0)
-                subtotal = data.get("subtotal", data.get("total", 0))
-                
-                sales_data.append({
-                    "id": sale.id,
-                    "Date": sale_date_str,
-                    "Time": data.get("timestamp", datetime.now()).strftime("%I:%M %p") if isinstance(data.get("timestamp"), datetime) else "N/A",
-                    "Customer": data.get("customer_name", "N/A"),
-                    "Phone": data.get("customer_phone", "N/A"),
-                    "Items": items_str,
-                    "Item Count": len(items),
-                    "Subtotal": subtotal,
-                    "Discount": discount_amount,
-                    "Total": data.get("total", 0),
-                    "Payment Method": data.get("payment_method", "Cash"),
-                    "Discount Type": data.get("discount_type", "No Discount"),
-                    "raw_items": items,
-                    "raw_timestamp": data.get("timestamp", datetime.now())
-                })
-        
-        if sales_data:
-            # Sort by date and time (newest first)
-            sales_data.sort(key=lambda x: x["raw_timestamp"], reverse=True)
-            
-            # Display summary metrics
-            st.subheader("📊 Summary")
-            col1, col2, col3, col4 = st.columns(4)
-            
-            total_sales = len(sales_data)
-            total_revenue = sum(s["Total"] for s in sales_data)
-            total_discount = sum(s["Discount"] for s in sales_data)
-            avg_order = total_revenue / total_sales if total_sales > 0 else 0
-            
-            with col1:
-                st.metric("Total Sales", total_sales)
-            with col2:
-                st.metric("Total Revenue", f"₹{total_revenue:,.2f}")
-            with col3:
-                st.metric("Total Discount", f"₹{total_discount:,.2f}")
-            with col4:
-                st.metric("Avg Order Value", f"₹{avg_order:,.2f}")
-            
-            st.markdown("---")
-            
-            # Display sales in expandable cards
-            st.subheader(f"📋 Sales List ({total_sales} sales)")
-            
-            # Search filter
-            search_customer = st.text_input("🔍 Search by Customer Name", placeholder="Type to filter...")
-            
-            # Filter by search
-            filtered_sales = sales_data
-            if search_customer:
-                filtered_sales = [s for s in sales_data if search_customer.lower() in s["Customer"].lower()]
-            
-            if not filtered_sales:
-                st.warning(f"No sales found matching '{search_customer}'")
-            else:
-                st.write(f"**Showing {len(filtered_sales)} of {total_sales} sales**")
-                
-                # Display each sale in an expandable card
-                for idx, sale in enumerate(filtered_sales):
-                    # Card header
-                    with st.expander(
-                        f"🧾 Sale #{total_sales - idx} - {sale['Customer']} - ₹{sale['Total']:,.2f} - {sale['Date']} {sale['Time']}",
-                        expanded=(idx == 0 and len(filtered_sales) <= 5)  # Expand first if 5 or fewer
-                    ):
-                        # Sale details in columns
-                        col_info1, col_info2 = st.columns(2)
-                        
-                        with col_info1:
-                            st.write("**Customer Information:**")
-                            st.write(f"👤 Name: {sale['Customer']}")
-                            st.write(f"📞 Phone: {sale['Phone']}")
-                            st.write(f"📅 Date: {sale['Date']}")
-                            st.write(f"🕐 Time: {sale['Time']}")
-                        
-                        with col_info2:
-                            st.write("**Payment Details:**")
-                            st.write(f"Subtotal: ₹{sale['Subtotal']:,.2f}")
-                            if sale['Discount'] > 0:
-                                st.write(f"Discount: -₹{sale['Discount']:,.2f}")
-                            st.write(f"**Total: ₹{sale['Total']:,.2f}**")
-                        
-                        st.markdown("---")
-                        
-                        # Items table
-                        st.write("**📦 Items Purchased:**")
-                        items_table_data = []
-                        for item in sale['raw_items']:
-                            items_table_data.append({
-                                "Item": item.get('name', 'Unknown'),
-                                "Quantity": item.get('qty', 0),
-                                "Price": f"₹{item.get('price', 0):,.2f}",
-                                "Amount": f"₹{item.get('qty', 0) * item.get('price', 0):,.2f}"
-                            })
-                        
-                        if items_table_data:
-                            df_items = pd.DataFrame(items_table_data)
-                            st.dataframe(df_items, use_container_width=True, hide_index=True)
-                        
-                        # Action buttons
-                        st.markdown("---")
-                        col_btn1, col_btn2, col_btn3, col_btn4 = st.columns([1, 1, 1, 1])
-                        
-                        with col_btn1:
-                            if st.button(f"🔄 Return", key=f"return_{sale['id']}", use_container_width=True):
-                                st.session_state["selected_sale_for_return"] = sale
-                                st.switch_page("pages/5_Returns.py")
-                        
-                        with col_btn2:
-                            # WhatsApp share
-                            wa_msg = build_whatsapp_message(
-                                sale['raw_items'],
-                                sale['Subtotal'],
-                                sale['Discount'],
-                                sale['Discount Type'],
-                                sale['Total'],
-                                sale['Customer']
-                            )
-                            if sale['Phone'] and sale['Phone'] != "N/A" and len(sale['Phone'].strip()) == 10:
-                                wa_link = f"https://wa.me/91{sale['Phone'].strip()}?text={wa_msg}"
-                            else:
-                                wa_link = f"https://wa.me/?text={wa_msg}"
-                            
-                            st.link_button("📲 WhatsApp", wa_link, use_container_width=True)
-
-                        with col_btn3:
-                            if st.button("🖨️ Thermal", key=f"print_{sale['id']}", use_container_width=True):
-                                thermal_html = generate_thermal_bill_html(
-                                    sale['raw_items'], sale['Subtotal'], sale['Discount'], 
-                                    sale['Discount Type'], sale['Total'], sale['Customer'], 
-                                    sale['Phone'], sale['Payment Method']
-                                )
-                                trigger_thermal_print(thermal_html)
-                                st.toast("Printing...")
-                        
-                        with col_btn4:
-                            if st.button("🗑️ Void Bill", type="primary", key=f"void_{sale['id']}", use_container_width=True):
-                                st.session_state[f"confirm_void_{sale['id']}"] = True
-                                st.rerun()
-                                
-                        # Void Confirmation Modal
-                        if st.session_state.get(f"confirm_void_{sale['id']}", False):
-                            st.markdown("""
-                            <div style='background: #fef2f2; padding: 15px; border-radius: 8px; border: 1px solid #fecaca; margin-top: 10px;'>
-                                <h4 style='color: #dc2626; margin-top: 0;'>⚠️ Confirm Void</h4>
-                                <p style='color: #991b1b; font-size: 14px;'>Are you sure you want to void this sale? This will permanently delete the invoice and <b>RESTORE</b> the stock into your inventory.</p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                            col_v1, col_v2 = st.columns(2)
-                            with col_v1:
-                                if st.button("✅ Yes, Void & Restore Stock", type="primary", key=f"do_void_{sale['id']}", use_container_width=True):
-                                    try:
-                                        # 1. Restore stock
-                                        for item in sale['raw_items']:
-                                            if 'id' in item:
-                                                item_ref = db.collection("items_master").document(item['id'])
-                                                item_doc = item_ref.get()
-                                                if item_doc.exists:
-                                                    current_stock = item_doc.to_dict().get("stock", 0)
-                                                    item_ref.update({"stock": current_stock + item['qty']})
-                                        
-                                        # 2. Delete the sale record
-                                        db.collection("sales").document(sale['id']).delete()
-                                        
-                                        # 3. Clear cache to reflect new stock
-                                        from utils import clear_items_cache
-                                        clear_items_cache()
-                                        
-                                        # 4. Clean up and refresh
-                                        st.session_state[f"confirm_void_{sale['id']}"] = False
-                                        st.toast("✅ Sale successfully voided & stock restored!")
-                                        st.rerun()
-                                        
-                                    except Exception as e:
-                                        st.error(f"Error voiding sale: {e}")
-                            with col_v2:
-                                if st.button("❌ Cancel", key=f"cancel_void_{sale['id']}", use_container_width=True):
-                                    st.session_state[f"confirm_void_{sale['id']}"] = False
-                                    st.rerun()
-            
-            st.markdown("---")
-            
-            # Export option
-            st.subheader("📥 Export Data")
-            
-            # Prepare export data
-            export_data = []
-            for sale in filtered_sales:
-                export_data.append({
-                    "Date": sale["Date"],
-                    "Time": sale["Time"],
-                    "Customer": sale["Customer"],
-                    "Phone": sale["Phone"],
-                    "Items": sale["Items"],
-                    "Item Count": sale["Item Count"],
-                    "Subtotal": sale["Subtotal"],
-                    "Discount": sale["Discount"],
-                    "Total": sale["Total"]
-                })
-            
-            df_export = pd.DataFrame(export_data)
-            
-            # Excel export
-            import io
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df_export.to_excel(writer, index=False, sheet_name='Sales History')
-            output.seek(0)
-            
-            st.download_button(
-                label="📥 Download Excel Report",
-                data=output,
-                file_name=f"sales_history_{start_date}_to_{end_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-        
+# ─── Date range picker ─────────────────────────────────────────────────────
+with st.container(border=True):
+    dc1, dc2, dc3 = st.columns([2, 2, 2])
+    with dc1:
+        mode = st.selectbox("Quick Range", ["Today", "Yesterday", "Last 7 Days", "Last 30 Days", "Custom"])
+    with dc2:
+        if mode == "Custom":
+            start_d = st.date_input("From", value=get_ist_time().date())
         else:
-            st.info(f"📭 No sales found for the selected period ({start_date} to {end_date})")
-            st.write("**Tips:**")
-            st.write("- Try selecting a different date range")
-            st.write("- Check if any sales were made during this period")
-            st.write("- Go to Sales page to create your first sale")
+            now = get_ist_time().date()
+            if mode == "Today": start_d = now
+            elif mode == "Yesterday": start_d = now - timedelta(days=1)
+            elif mode == "Last 7 Days": start_d = now - timedelta(days=7)
+            elif mode == "Last 30 Days": start_d = now - timedelta(days=30)
+    with dc3:
+        if mode == "Custom":
+            end_d = st.date_input("To", value=get_ist_time().date())
+        else:
+            now = get_ist_time().date()
+            if mode == "Today": end_d = now
+            elif mode == "Yesterday": end_d = now - timedelta(days=1)
+            else: end_d = now
 
-except Exception as e:
-    st.error(f"❌ Error loading sales history: {e}")
-    import traceback
-    st.code(traceback.format_exc())
+start_str = start_d.strftime("%Y-%m-%d")
+end_str   = end_d.strftime("%Y-%m-%d")
 
-# Quick stats by date (if multiple days)
-if sales_data and (end_date - start_date).days > 0:
+# ─── Fetch with Caching ────────────────────────────────────────────────────
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_sales_history(s_str, e_str):
+    try:
+        docs = db.collection("sales") \
+                  .where("date", ">=", s_str) \
+                  .where("date", "<=", e_str) \
+                  .order_by("date", direction="DESCENDING") \
+                  .stream()
+
+        results = []
+        for d in docs:
+            dd = d.to_dict()
+            ts = dd.get("timestamp")
+            results.append({
+                "_id":       d.id,
+                "Date":      dd.get("date", ""),
+                "Time":      ts.strftime("%I:%M %p") if isinstance(ts, datetime) else "N/A",
+                "Customer":  dd.get("customer_name", "N/A"),
+                "EnteredBy": dd.get("entered_by") or dd.get("entered_by_username", "N/A"),
+                "Phone":     dd.get("customer_phone", ""),
+                "Items":     dd.get("items", []),
+                "Items_str": ", ".join(f"{i['name']} ×{i['qty']}" for i in dd.get("items", [])),
+                "Subtotal":  dd.get("subtotal", dd.get("total", 0)),
+                "Discount":  dd.get("discount_amount", 0),
+                "Total":     dd.get("total", 0),
+                "Payment":   dd.get("payment_method", "Cash"),
+                "Dis_type":  dd.get("discount_type", "No Discount"),
+                "has_returns": dd.get("has_returns", False),
+                "voided":    dd.get("voided", False),
+                "_ts_val":   ts.timestamp() if isinstance(ts, datetime) else 0,
+            })
+        results.sort(key=lambda x: x["_ts_val"], reverse=True)
+        return results
+    except Exception as e:
+        return []
+
+with st.spinner("Retrieving records..."):
+    all_rows = fetch_sales_history(start_str, end_str)
+
+# ─── Filtering (Client-side for speed) ────────────────────────────────────
+rows = all_rows
+
+if rows:
+    active_rows = [r for r in rows if not r["voided"]]
+    total_rev  = sum(r["Total"] for r in active_rows)
+    total_disc = sum(r["Discount"] for r in active_rows)
+    avg_order  = total_rev / len(active_rows) if active_rows else 0
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total Sales", len(active_rows))
+    m2.metric("Total Revenue", f"₹{total_rev:,.2f}")
+    m3.metric("Total Discounts", f"₹{total_disc:,.2f}")
+    m4.metric("Avg. Order Value", f"₹{avg_order:,.2f}")
+
     st.markdown("---")
-    st.subheader("📈 Daily Breakdown")
-    
-    # Group by date
-    daily_stats = {}
-    for sale in sales_data:
-        date = sale["Date"]
-        if date not in daily_stats:
-            daily_stats[date] = {"count": 0, "revenue": 0}
-        daily_stats[date]["count"] += 1
-        daily_stats[date]["revenue"] += sale["Total"]
-    
-    # Create chart data
-    chart_data = []
-    for date, stats in sorted(daily_stats.items()):
-        chart_data.append({
-            "Date": date,
-            "Sales": stats["count"],
-            "Revenue": stats["revenue"]
-        })
-    
-    df_chart = pd.DataFrame(chart_data)
-    
-    # Display chart
-    col_chart1, col_chart2 = st.columns(2)
-    
-    with col_chart1:
-        st.write("**Sales Count by Date**")
-        st.bar_chart(df_chart.set_index("Date")["Sales"])
-    
-    with col_chart2:
-        st.write("**Revenue by Date**")
-        st.bar_chart(df_chart.set_index("Date")["Revenue"])
 
+    # ─── Client-side Filter Bar ─────────────────────────────────────────────
+    sf1, sf2 = st.columns(2)
+    with sf1:
+        search_name = st.text_input("🔍 Search Customer", placeholder="Type name...")
+    with sf2:
+        payment_filter = st.selectbox("Payment Mode", ["All", "Cash", "UPI / GPay", "Card / POS", "Credit / Due"])
+
+    if search_name:
+        rows = [r for r in rows if search_name.lower() in r["Customer"].lower()]
+    if payment_filter != "All":
+        rows = [r for r in rows if r["Payment"] == payment_filter]
+
+    st.caption(f"Showing {len(rows)} matching transactions")
+
+    # ─── Render List ───────────────────────────────────────────────────────
+    for idx, sale in enumerate(rows):
+        status_tag = "❌ VOIDED" if sale["voided"] else "🔄 RETURNS" if sale["has_returns"] else "✅"
+        bgcolor = "#fff1f2" if sale["voided"] else "white"
+        
+        with st.container(border=True):
+            r_hdr, r_act = st.columns([4, 1])
+            with r_hdr:
+                st.markdown(f"**{sale['Customer']}** &nbsp; | &nbsp; ₹{sale['Total']:,.2f} &nbsp; | &nbsp; {status_tag}")
+                st.caption(f"{sale['Date']} {sale['Time']} • {sale['Payment']} • {sale['EnteredBy']}")
+            
+            with r_act:
+                if st.button("Details", key=f"det_btn_{sale['_id']}", use_container_width=True):
+                    st.session_state[f"show_det_{sale['_id']}"] = not st.session_state.get(f"show_det_{sale['_id']}", False)
+            
+            if st.session_state.get(f"show_det_{sale['_id']}", False):
+                st.markdown("---")
+                d_c1, d_c2 = st.columns(2)
+                with d_c1:
+                    st.write(f"**📞 Phone:** {sale['Phone'] or 'N/A'}")
+                    st.write(f"**🧾 Subtotal:** ₹{sale['Subtotal']:,.2f}")
+                    if sale["Discount"] > 0:
+                        st.write(f"**🏷️ Discount:** -₹{sale['Discount']:,.2f} ({sale['Dis_type']})")
+                with d_c2:
+                    if sale["Items"]:
+                        i_df = pd.DataFrame([{"Product": i["name"], "Qty": i["qty"], "Total": f"₹{i.get('qty',0)*i.get('price',0):,.0f}"} for i in sale["Items"]])
+                        st.dataframe(i_df, use_container_width=True, hide_index=True)
+                
+                # Actions inside details
+                if not sale["voided"]:
+                    act1, act2, act3, act4 = st.columns(4)
+                    with act1:
+                        if st.button("🔄 Return", key=f"ret_s_{sale['_id']}", use_container_width=True):
+                            st.session_state["selected_sale_for_return"] = sale
+                            st.switch_page("pages/5_Returns.py")
+                    with act2:
+                        wa_msg  = build_whatsapp_message(sale["Items"], sale["Subtotal"], sale["Discount"], sale["Dis_type"], sale["Total"], sale["Customer"])
+                        wa_link = (f"https://wa.me/91{sale['Phone'].strip()}?text={wa_msg}" if sale["Phone"] and len(sale["Phone"].strip()) == 10 else f"https://wa.me/?text={wa_msg}")
+                        st.link_button("📲 WhatsApp", wa_link, use_container_width=True)
+                    with act3:
+                        if st.button("🖨️ Reprint", key=f"pr_s_{sale['_id']}", use_container_width=True):
+                            th = generate_thermal_bill_html(sale["Items"], sale["Subtotal"], sale["Discount"], sale["Dis_type"], sale["Total"], sale["Customer"], sale["Phone"], sale["Payment"])
+                            trigger_thermal_print(th)
+                    with act4:
+                        if st.button("🗑️ Void", key=f"vd_s_{sale['_id']}", use_container_width=True, type="secondary"):
+                            st.session_state[f"void_q_{sale['_id']}"] = True
+
+                    if st.session_state.get(f"void_q_{sale['_id']}", False):
+                        st.error("Restore stock and cancel this sale?")
+                        vy, vn = st.columns(2)
+                        if vy.button("Yes, Void", key=f"v_y_{sale['_id']}", type="primary", use_container_width=True):
+                            try:
+                                @firestore_module.transactional
+                                def do_void(tx, sale_id, items):
+                                    s_ref = db.collection("sales").document(sale_id)
+                                    s_snap = s_ref.get(transaction=tx)
+                                    if s_snap.exists and not s_snap.to_dict().get("voided"):
+                                        for itm in items:
+                                            if itm.get("id"):
+                                                i_ref = db.collection("items_master").document(itm["id"])
+                                                i_snap = i_ref.get(transaction=tx)
+                                                if i_snap.exists:
+                                                    tx.update(i_ref, {"stock": i_snap.to_dict().get("stock", 0) + itm["qty"]})
+                                        tx.update(s_ref, {"voided": True})
+                                do_void(db.transaction(), sale["_id"], sale["Items"])
+                                fetch_sales_history.clear()
+                                clear_items_cache()
+                                clear_dashboard_cache()
+                                st.rerun()
+                            except Exception as e: st.error(str(e))
+                        if vn.button("Cancel", key=f"v_n_{sale['_id']}", use_container_width=True):
+                            del st.session_state[f"void_q_{sale['_id']}"]
+                            st.rerun()
+
+    # ─── Export ────────────────────────────────────────────────────────────
+    st.markdown("---")
+    export_df = pd.DataFrame([{
+        "Date": r["Date"], "Time": r["Time"], "Customer": r["Customer"], "Staff": r["EnteredBy"],
+        "Items": r["Items_str"], "Total": r["Total"], "Payment": r["Payment"], "Status": "Voided" if r["voided"] else "Active"
+    } for r in rows])
+    buf = io.BytesIO()
+    export_df.to_excel(buf, index=False, sheet_name="Sales")
+    st.download_button("📥 Export Current List to Excel", buf.getvalue(), file_name=f"sales_{start_str}.xlsx", use_container_width=True)
+
+else:
+    st.info(f"No transactions found for **{start_str}** to **{end_str}**.")
