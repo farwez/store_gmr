@@ -2,9 +2,9 @@ import streamlit as st
 from firebase_config import db
 from datetime import datetime
 import pandas as pd
-from utils import inject_custom_css, render_sidebar, get_ist_time, check_admin, get_all_items, clear_items_cache
+from utils import inject_custom_css, render_sidebar, get_ist_time, check_admin, get_all_items, clear_items_cache, clear_dashboard_cache
 
-st.set_page_config(page_title="Stock Adjustments", page_icon="📦", layout="wide")
+st.set_page_config(page_title="Stock Adjustments", page_icon="📦", layout="wide", initial_sidebar_state="expanded")
 inject_custom_css()
 render_sidebar()
 check_admin()
@@ -31,7 +31,7 @@ tab1, tab2 = st.tabs(["📉 New Stock Adjustment", "📋 Adjustment History"])
 with tab1:
     st.subheader("Adjust Item Stock")
     
-    with st.form("stock_adj_form", clear_on_submit=True):
+    with st.form("stock_adj_form", clear_on_submit=True, enter_to_submit=False):
         col_f1, col_f2 = st.columns(2)
         
         with col_f1:
@@ -62,8 +62,7 @@ with tab1:
             ])
             
             notes = st.text_input("Additional Notes", placeholder="E.g., Dropped from shelf")
-            
-        # Display current stock as info
+
         if selected_item:
             st.info(f"📊 Current Stock for **{selected_item['name']}**: {selected_item.get('stock', 0)} units")    
             
@@ -98,6 +97,7 @@ with tab1:
                     
                     # 3. Clear Cache
                     clear_items_cache()
+                    clear_dashboard_cache()
                     
                     st.success(f"✅ Adjusted {qty_to_adjust} units of {selected_item['name']}. New stock is {new_stock}.")
                     st.toast("Stock Updated!")
@@ -149,3 +149,4 @@ with tab2:
         
     else:
         st.info("No stock adjustments recorded yet.")
+
