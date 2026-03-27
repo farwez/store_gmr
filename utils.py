@@ -453,6 +453,13 @@ def inject_custom_css():
             align-items: center !important;
             justify-content: center !important;
             transition: all 0.2s ease !important;
+            
+            /* FORCE CUSTOM HAMBURGER ICON */
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%230f172a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6h16M4 12h16M4 18h16'/%3E%3C/svg%3E") !important;
+            background-repeat: no-repeat !important;
+            background-position: center !important;
+            background-size: 22px 22px !important;
+            color: transparent !important;
         }
 
         [data-testid="collapsedControl"]:hover, 
@@ -470,35 +477,21 @@ def inject_custom_css():
             transform: scale(0.95) !important;
         }
 
-        /* SVG Arrow Icons */
+        /* Completely hide Streamlit's native invisible SVG/Divs inside the button */
+        [data-testid="collapsedControl"] > *,
+        [data-testid="stSidebarCollapsedControl"] > *,
+        [data-testid="stExpandSidebarButton"] > * {
+            display: none !important;
+            opacity: 0 !important;
+            visibility: hidden !important;
+        }
+
+        /* Inside Sidebar Close Button (Normal) */
         [data-testid="stSidebarCollapseButton"] svg {
             fill: #ffffff !important;
             color: #ffffff !important;
             width: 20px !important;
             height: 20px !important;
-        }
-
-        [data-testid="collapsedControl"],
-        [data-testid="stSidebarCollapsedControl"],
-        [data-testid="stExpandSidebarButton"] {
-            color: #0f172a !important;
-        }
-
-        [data-testid="collapsedControl"] svg,
-        [data-testid="stSidebarCollapsedControl"] svg,
-        [data-testid="stExpandSidebarButton"] svg {
-            fill: #0f172a !important;
-            color: #0f172a !important;
-            stroke: #0f172a !important;
-            width: 24px !important;
-            height: 24px !important;
-        }
-        
-        [data-testid="collapsedControl"] svg path,
-        [data-testid="stSidebarCollapsedControl"] svg path,
-        [data-testid="stExpandSidebarButton"] svg path {
-            fill: #0f172a !important;
-            stroke: #0f172a !important;
         }
 
         /* Mobile specific — ensure it's not cut off by status bar */
