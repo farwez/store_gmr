@@ -438,51 +438,71 @@ def inject_custom_css():
         [data-testid="collapsedControl"], 
         [data-testid="stSidebarCollapsedControl"], 
         [data-testid="stExpandSidebarButton"] {
-            background-color: #0f172a !important;
-            border-radius: 50% !important;
-            border: 2px solid #334155 !important;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3) !important;
-            width: 50px !important;
-            height: 50px !important;
+            background-color: rgba(255, 255, 255, 0.95) !important;
+            backdrop-filter: blur(8px) !important;
+            border-radius: 12px !important;
+            border: 1px solid #e2e8f0 !important;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03) !important;
+            width: 44px !important;
+            height: 44px !important;
             position: fixed !important;
-            top: 15px !important;
-            left: 15px !important;
+            top: 20px !important;
+            left: 20px !important;
             z-index: 10000000 !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
+            transition: all 0.2s ease !important;
+        }
+
+        [data-testid="collapsedControl"]:hover, 
+        [data-testid="stSidebarCollapsedControl"]:hover, 
+        [data-testid="stExpandSidebarButton"]:hover {
+            background-color: #ffffff !important;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1) !important;
+            transform: translateY(-1px) !important;
+        }
+
+        [data-testid="collapsedControl"]:active, 
+        [data-testid="stSidebarCollapsedControl"]:active, 
+        [data-testid="stExpandSidebarButton"]:active {
+            background-color: #f8fafc !important;
+            transform: scale(0.95) !important;
         }
 
         /* SVG Arrow Icons */
-        [data-testid="stSidebarCollapseButton"] svg,
+        [data-testid="stSidebarCollapseButton"] svg {
+            fill: #ffffff !important;
+            color: #ffffff !important;
+            width: 20px !important;
+            height: 20px !important;
+        }
+
         [data-testid="collapsedControl"] svg,
         [data-testid="stSidebarCollapsedControl"] svg,
         [data-testid="stExpandSidebarButton"] svg {
-            fill: #ffffff !important;
-            width: 24px !important;
-            height: 24px !important;
-            color: #ffffff !important;
+            fill: #0f172a !important;
+            color: #0f172a !important;
+            width: 22px !important;
+            height: 22px !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
 
         /* Mobile specific — ensure it's not cut off by status bar */
         @media (max-width: 768px) {
-            .main { padding-top: 80px !important; }
+            [data-testid="stAppViewContainer"] {
+                padding-top: 60px !important;
+            }
+            .main { padding-top: 20px !important; }
+            
             [data-testid="collapsedControl"], 
             [data-testid="stSidebarCollapsedControl"], 
             [data-testid="stExpandSidebarButton"] {
-                width: 60px !important;
-                height: 60px !important;
-                top: 20px !important;
-                left: 20px !important;
-                background-color: #4f46e5 !important; /* Brighter color for visibility */
-                border: 2px solid #ffffff !important;
-                box-shadow: 0 4px 15px rgba(79, 70, 229, 0.6) !important;
-            }
-            [data-testid="collapsedControl"] svg,
-            [data-testid="stSidebarCollapsedControl"] svg,
-            [data-testid="stExpandSidebarButton"] svg {
-                width: 32px !important;
-                height: 32px !important;
+                width: 44px !important;
+                height: 44px !important;
+                top: 16px !important;
+                left: 16px !important;
             }
         }
 
