@@ -478,15 +478,27 @@ def inject_custom_css():
             height: 20px !important;
         }
 
+        [data-testid="collapsedControl"],
+        [data-testid="stSidebarCollapsedControl"],
+        [data-testid="stExpandSidebarButton"] {
+            color: #0f172a !important;
+        }
+
         [data-testid="collapsedControl"] svg,
         [data-testid="stSidebarCollapsedControl"] svg,
         [data-testid="stExpandSidebarButton"] svg {
             fill: #0f172a !important;
             color: #0f172a !important;
-            width: 22px !important;
-            height: 22px !important;
-            margin: 0 !important;
-            padding: 0 !important;
+            stroke: #0f172a !important;
+            width: 24px !important;
+            height: 24px !important;
+        }
+        
+        [data-testid="collapsedControl"] svg path,
+        [data-testid="stSidebarCollapsedControl"] svg path,
+        [data-testid="stExpandSidebarButton"] svg path {
+            fill: #0f172a !important;
+            stroke: #0f172a !important;
         }
 
         /* Mobile specific — ensure it's not cut off by status bar */
