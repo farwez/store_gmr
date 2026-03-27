@@ -23,9 +23,12 @@ def get_ist_time():
 def today_string():
     return get_ist_time().strftime("%Y-%m-%d")
 
-def hash_password(password):
-    """Simple SHA-256 hashing for passwords."""
-    return hashlib.sha256(password.encode()).hexdigest()
+def hash_password(password, salt=None):
+    """Secure PBKDF2 hashing for passwords."""
+    if salt is None:
+        salt = os.urandom(16).hex()
+    hashed = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000).hex()
+    return f"{hashed}${salt}"
 
 def verify_user(username, password):
     """Verify credentials against Firestore."""
@@ -33,29 +36,120 @@ def verify_user(username, password):
         user_doc = db.collection("users").document(username.lower()).get()
         if user_doc.exists:
             data = user_doc.to_dict()
-            if data.get("password") == hash_password(password):
-                return {"username": username, "name": data.get("name", username)}
+            stored_hash = data.get("password", "")
+            
+            # Legacy SHA-256 fallback and automatic upgrade
+            if stored_hash == hashlib.sha256(password.encode()).hexdigest():
+                db.collection("users").document(username.lower()).update({"password": hash_password(password)})
+                return {"username": username, "name": data.get("name", username), "role": data.get("role", "user")}
+                
+            # Secure PBKDF2 hash verification
+            elif "$" in stored_hash:
+                _, salt = stored_hash.split("$", 1)
+                if hash_password(password, salt) == stored_hash:
+                    return {"username": username, "name": data.get("name", username), "role": data.get("role", "user")}
         return None
     except Exception as e:
         print(f"Auth error: {e}")
         return None
 
-def create_user(username, password, name=""):
+def create_user(username, password, name="", role="user"):
     """Create a new user in Firestore."""
     try:
         user_ref = db.collection("users").document(username.lower())
         if user_ref.get().exists:
             return False, "Username already exists"
-        
+
+        role = (role or "user").strip().lower()
+        if role not in {"admin", "user"}:
+            role = "user"
+
+        # First account is always admin bootstrap
+        users_count = db.collection("users").count().get()[0][0].value
+        if users_count == 0:
+            role = "admin"
+
         user_ref.set({
             "username": username.lower(),
             "password": hash_password(password),
             "name": name or username,
+            "role": role,
             "created_at": get_ist_time()
         })
-        return True, "User created successfully"
+        return True, f"User created successfully as {role}"
     except Exception as e:
         return False, str(e)
+
+
+def set_user_password(username, new_password):
+    """Set password for an existing user using secure hashing."""
+    try:
+        uname = (username or "").strip().lower()
+        pwd = (new_password or "").strip()
+        if not uname or not pwd:
+            return False, "Username and new password are required"
+        user_ref = db.collection("users").document(uname)
+        if not user_ref.get().exists:
+            return False, "User not found"
+        user_ref.update({"password": hash_password(pwd)})
+        return True, "Password updated successfully"
+    except Exception as e:
+        return False, str(e)
+
+
+def change_user_password(username, current_password, new_password):
+    """Change password after validating current password."""
+    try:
+        uname = (username or "").strip()
+        curr = (current_password or "").strip()
+        newp = (new_password or "").strip()
+        if not uname or not curr or not newp:
+            return False, "Current password and new password are required"
+        user = verify_user(uname, curr)
+        if not user:
+            return False, "Current password is incorrect"
+        return set_user_password(uname, newp)
+    except Exception as e:
+        return False, str(e)
+
+import hmac
+
+@st.cache_resource
+def get_server_secret():
+    """Retrieve or create a server secret for HMAC signing.
+    Cached as a resource so it only hits Firestore ONCE per server lifecycle.
+    """
+    try:
+        secret_doc = db.collection("settings").document("server_secret").get()
+        if secret_doc.exists:
+            return secret_doc.to_dict().get("key", "fallback_secret")
+        else:
+            new_key = os.urandom(32).hex()
+            db.collection("settings").document("server_secret").set({"key": new_key})
+            return new_key
+    except:
+        return "fallback_secret"
+
+SERVER_SECRET = get_server_secret()
+
+def sign_session_data(data_dict):
+    """Sign a dictionary payload securely with HMAC-SHA256."""
+    data_str = json.dumps(data_dict, sort_keys=True)
+    signature = hmac.new(SERVER_SECRET.encode(), data_str.encode(), hashlib.sha256).hexdigest()
+    return f"{data_str}|{signature}"
+
+def verify_session_data(signed_str):
+    """Verify an HMAC-SHA256 signed payload and return the dictionary."""
+    if not signed_str or "|" not in signed_str:
+        return None
+    data_str, signature = signed_str.rsplit("|", 1)
+    expected_signature = hmac.new(SERVER_SECRET.encode(), data_str.encode(), hashlib.sha256).hexdigest()
+    if hmac.compare_digest(expected_signature, signature):
+        try:
+            return json.loads(data_str)
+        except json.JSONDecodeError:
+            return None
+    return None
 
 def enforce_login_and_restore():
     if not st.session_state.get("authenticated", False):
@@ -64,9 +158,19 @@ def enforce_login_and_restore():
             setTimeout(() => {
                 const session = localStorage.getItem('gmr_auth_session');
                 if (session) {
-                    const data = JSON.parse(session);
-                    const now = new Date().getTime();
-                    if (now < data.expiry) {
+                    let shouldRestore = false;
+                    try {
+                        let payload = session;
+                        if (session.includes('|')) {
+                            payload = session.slice(0, session.lastIndexOf('|'));
+                        }
+                        const data = JSON.parse(payload);
+                        shouldRestore = !!data.expiry && new Date().getTime() < data.expiry;
+                    } catch (e) {
+                        shouldRestore = session.includes('|');
+                    }
+
+                    if (shouldRestore) {
                         const inputs = window.parent.document.querySelectorAll('input[aria-label="session_restorer"]');
                         if (inputs.length > 0) {
                             const input = inputs[inputs.length - 1];
@@ -76,6 +180,8 @@ def enforce_login_and_restore():
                                 input.dispatchEvent(new KeyboardEvent('keydown', { 'key': 'Enter', 'bubbles': true }));
                             }
                         }
+                    } else {
+                        localStorage.removeItem('gmr_auth_session');
                     }
                 }
             }, 300);
@@ -102,15 +208,25 @@ def enforce_login_and_restore():
         restored_session = st.text_input("session_restorer", label_visibility="collapsed", key="restore_token")
         
         if restored_session and not st.session_state.get("authenticated"):
-            try:
-                import json
-                data = json.loads(restored_session)
-                st.session_state["authenticated"] = True
-                st.session_state["username"] = data["username"]
-                st.session_state["user_name"] = data.get("name", data["username"])
-                st.rerun()
-            except:
-                pass
+            # If the session string starts with {, it's legacy insecure JSON. We reject it to force re-login.
+            if restored_session.startswith("{"):
+                st.markdown("<script>localStorage.removeItem('gmr_auth_session');</script>", unsafe_allow_html=True)
+                return False
+                
+            data = verify_session_data(restored_session)
+            if data:
+                try:
+                    now = datetime.now().timestamp() * 1000
+                    if data.get("expiry", 0) > now:
+                        st.session_state["authenticated"] = True
+                        st.session_state["username"] = data["username"]
+                        st.session_state["user_name"] = data.get("name", data.get("username", ""))
+                        st.session_state["user_role"] = data.get("role", "user")
+                        st.rerun()
+                except Exception:
+                    pass
+            else:
+                st.markdown("<script>localStorage.removeItem('gmr_auth_session');</script>", unsafe_allow_html=True)
         return False
     return True
 
@@ -129,8 +245,11 @@ def check_auth(quiet=False):
     return True
 
 def check_admin():
-    """Admin restriction removed. All users have equal access."""
+    """Restrict access to admin users only."""
     if not check_auth():
+        st.stop()
+    if st.session_state.get("user_role", "user") != "admin":
+        st.warning("⛔ Admin access required. Please login as an admin.")
         st.stop()
 
 # --- SETTINGS MANAGEMENT ---
@@ -149,7 +268,8 @@ def get_settings():
                 "phone": "0000000000",
                 "email": "store@example.com",
                 "gstin": "",
-                "currency": "₹"
+                "currency": "₹",
+                "allow_self_signup": True
             }
     except Exception as e:
         print(f"Error fetching settings: {e}")
@@ -178,6 +298,15 @@ def inject_custom_css():
             --shadow-lg: 0 20px 25px -5px rgba(0,0,0,0.08), 0 10px 10px -5px rgba(0,0,0,0.04);
         }
         
+        @keyframes slideFadeIn {
+            0% { opacity: 0; transform: translateY(10px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        [data-testid="stMainBlockContainer"] {
+            animation: slideFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
         .stApp {
             background-color: var(--bg-main) !important;
             font-family: 'Inter', sans-serif !important;
@@ -186,6 +315,25 @@ def inject_custom_css():
         /* Add top spacing for the new FAB button */
         [data-testid="stAppViewContainer"] {
             padding-top: 50px !important;
+        }
+
+        /* ------------------------------------- */
+        /* PREMIUM CARDS & CONTAINERS            */
+        /* ------------------------------------- */
+        [data-testid="stVerticalBlock"] > [style*="border"] {
+            background-color: white !important;
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 16px !important;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03) !important;
+            padding: 24px !important;
+            margin-bottom: 1.5rem !important;
+        }
+        
+        /* Metric Styling */
+        [data-testid="stMetricValue"] {
+            font-size: 1.8rem !important;
+            font-weight: 700 !important;
+            color: #1e293b !important;
         }
 
         /* ------------------------------------- */
@@ -383,15 +531,15 @@ def inject_custom_css():
         }
         
         /* Sidebar buttons (Refresh / Logout) */
-        [data-testid="stSidebar"] button {
-            background: #1e293b !important;
-            border: 1px solid #334155 !important;
-            color: #e2e8f0 !important;
+        [data-testid="stSidebar"] button[kind="secondary"] {
+            background: rgba(30, 41, 59, 0.8) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            color: #cbd5e1 !important;
             border-radius: 10px !important;
         }
-        [data-testid="stSidebar"] button:hover {
-            background: #334155 !important;
-            border-color: #475569 !important;
+        [data-testid="stSidebar"] button[kind="secondary"]:hover {
+            background: rgba(71, 85, 105, 0.8) !important;
+            border-color: rgba(255, 255, 255, 0.2) !important;
             color: #ffffff !important;
         }
 
@@ -427,7 +575,7 @@ def inject_custom_css():
             border-radius: var(--radius-lg) !important;
             padding: 24px !important;
             box-shadow: var(--shadow-md) !important;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
             position: relative;
             overflow: hidden;
         }
@@ -435,16 +583,16 @@ def inject_custom_css():
         [data-testid="stMetric"]::before {
             content: '';
             position: absolute;
-            top: 0; left: 0; right: 0; height: 4px;
+            top: 0; left: 0; right: 0; height: 3px;
             background: var(--brand-gradient);
-            opacity: 0;
+            opacity: 0.1;
             transition: opacity 0.3s ease;
         }
 
         [data-testid="stMetric"]:hover {
-            transform: translateY(-5px);
-            box-shadow: var(--shadow-lg) !important;
-            border-color: rgba(79, 70, 229, 0.3) !important;
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+            border-color: var(--brand-primary) !important;
         }
 
         [data-testid="stMetric"]:hover::before {
@@ -452,17 +600,38 @@ def inject_custom_css():
         }
 
         [data-testid="stMetricLabel"] {
-            font-size: 15px !important;
+            font-size: 14px !important;
             color: var(--text-muted) !important;
-            font-weight: 500 !important;
+            font-weight: 600 !important;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         [data-testid="stMetricValue"] {
             color: var(--text-main) !important;
-            font-size: 2.2rem !important;
             font-weight: 800 !important;
-            font-family: 'Outfit', sans-serif !important;
-            margin-top: 5px !important;
+            font-size: 2.2rem !important;
+            letter-spacing: -0.02em;
+        }
+
+        /* Glassmorphism for containers */
+        div.stContainer {
+            transition: all 0.3s ease-in-out !important;
+        }
+        
+        div.stContainer:hover {
+            border-color: #6366f1 !important;
+        }
+
+        /* Button micro-interactions */
+        .stButton > button {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            border-radius: 10px !important;
+            font-weight: 600 !important;
+        }
+        
+        .stButton > button:active {
+            transform: scale(0.96) !important;
         }
         
         [data-testid="stMetricDelta"] {
@@ -480,6 +649,7 @@ def inject_custom_css():
             border: 1px solid #e2e8f0 !important;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
             border-radius: 8px !important;
+            max-height: 480px !important;
         }
 
         /* Items in the list */
@@ -514,6 +684,15 @@ def inject_custom_css():
         div.stAlert:hover {
             box-shadow: var(--shadow-lg) !important;
             transform: translateY(-2px);
+        }
+
+        [data-testid="stToast"] {
+            background-color: white !important;
+            border-radius: 12px !important;
+            border: 1px solid var(--border-color) !important;
+            border-left: 4px solid var(--brand-secondary) !important;
+            box-shadow: var(--shadow-lg) !important;
+            padding: 10px !important;
         }
 
         /* 7. TABLES - PREMIUM LOOK */
@@ -577,7 +756,7 @@ def inject_custom_css():
 
         button[kind="primary"]:hover {
             box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5) !important;
-            transform: scale(1.02);
+            transform: scale(1.02) !important;
         }
 
         button[kind="secondary"] {
@@ -594,11 +773,31 @@ def inject_custom_css():
             background: var(--bg-main) !important;
             border-color: #94a3b8 !important;
             box-shadow: var(--shadow-md) !important;
-            transform: translateY(-1px);
+            transform: translateY(-2px) !important;
         }
         
     </style>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    
+    <!-- JS Injection for 'Enter' key tab navigation (essential for barcode scanners and fast typing) -->
+    <img src="x" onerror="
+        if(!window.parent.enterBound){
+            window.parent.document.addEventListener('keydown', function(event) {
+                if (event.key === 'Enter' && event.target.tagName === 'INPUT' && event.target.type !== 'submit') {
+                    event.preventDefault();
+                    // Custom logic to focus the next input or button
+                    const focusableElements = Array.from(window.parent.document.querySelectorAll('input:not([disabled]), button:not([disabled])'));
+                    const index = focusableElements.indexOf(event.target);
+                    if (index > -1 && index + 1 < focusableElements.length) { 
+                        focusableElements[index + 1].focus(); 
+                    }
+                }
+            });
+            window.parent.enterBound = true;
+        }
+    " style="display:none;">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet"></noscript>
 
     
     <script>
@@ -638,13 +837,166 @@ def inject_custom_css():
     </script>
     """, unsafe_allow_html=True)
 
+    import streamlit.components.v1 as components
+    components.html(
+        """
+        <script>
+        (function() {
+            try {
+                const P = window.parent;
+                const D = P.document;
+                
+                // version 5.0 - Robust Streamlit Navigation
+                if (!D || D.__poStoreEnterBoundV5) return;
+
+                function isVisible(el) {
+                    if (!el) return false;
+                    if (el.disabled || el.readOnly) return false;
+                    const style = P.getComputedStyle(el);
+                    if (style.display === 'none' || style.visibility === 'hidden') return false;
+                    const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+                    return !!(rect && rect.width > 0 && rect.height > 0);
+                }
+
+                function isField(el) {
+                    if (!el) return false;
+                    // Ignore the session restorer hidden field
+                    if (el.getAttribute && el.getAttribute('aria-label') === 'session_restorer') return false;
+                    
+                    const tag = (el.tagName || '').toUpperCase();
+                    const role = (el.getAttribute && el.getAttribute('role')) || '';
+                    const type = (el.type || '').toLowerCase();
+
+                    // Standard inputs
+                    if (tag === 'INPUT' && !['hidden', 'checkbox', 'radio', 'button', 'submit', 'file', 'range'].includes(type)) return true;
+                    if (tag === 'SELECT') return true;
+                    if (role === 'combobox' || el.closest('[data-baseweb="select"]')) return true;
+                    
+                    return false;
+                }
+
+                function getFields(scope) {
+                    // Find all possible interactable elements
+                    const selectors = 'input:not([type="hidden"]):not([disabled]), select:not([disabled]), [role="combobox"], [data-baseweb="select"] input';
+                    const nodes = Array.from(scope.querySelectorAll(selectors));
+                    
+                    // Filter and deduplicate (Streamlit selectboxes often have multiple elements)
+                    const seen = new Set();
+                    return nodes.filter(n => {
+                        const isF = isField(n);
+                        if (!isF || !isVisible(n)) return false;
+                        
+                        // For selectboxes, we only want one focusable element per widget
+                        const container = n.closest('[data-testid="stSelectbox"]') || n.closest('[data-testid="stTextInput"]') || n.closest('[data-testid="stNumberInput"]');
+                        if (container) {
+                            if (seen.has(container)) return false;
+                            seen.add(container);
+                        }
+                        return true;
+                    });
+                }
+
+                function nearestSubmit(scope, current) {
+                    const selectors = [
+                        '[data-testid="stFormSubmitButton"] button',
+                        'button[kind="primary"]',
+                        'button[type="submit"]',
+                        '[data-testid="baseButton-primary"]'
+                    ].join(',');
+
+                    const candidates = Array.from(D.querySelectorAll(selectors)).filter(isVisible);
+                    
+                    // Priority 1: Following the current element in the same scope
+                    const following = candidates.filter(b => {
+                        return !!(current.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+                    });
+                    
+                    if (following.length > 0) return following[0];
+                    
+                    // Priority 2: Any primary button in the current form/container
+                    const local = scope ? Array.from(scope.querySelectorAll(selectors)).filter(isVisible) : [];
+                    if (local.length > 0) return local[local.length - 1];
+
+                    // Priority 3: Any primary button on page
+                    return candidates.length > 0 ? candidates[candidates.length - 1] : null;
+                }
+
+                function focusEl(el) {
+                    if (!el) return;
+                    try {
+                        // Special handling for Streamlit Selectbox (BaseWeb)
+                        const selectbox = el.closest('[data-baseweb="select"]');
+                        if (selectbox) {
+                            const input = selectbox.querySelector('input');
+                            if (input) { input.focus(); return; }
+                        }
+                        
+                        el.focus();
+                        if (el.tagName === 'INPUT' && typeof el.select === 'function') {
+                            el.select();
+                        }
+                    } catch(e) {}
+                }
+
+                function onKeyDown(e) {
+                    // Only handle Enter without modifiers
+                    if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
+                    
+                    // Ignore if we are in a textarea
+                    if (e.target.tagName === 'TEXTAREA') return;
+
+                    let current = e.target;
+                    if (!isField(current)) {
+                        current = current.closest('input, select, [role="combobox"]');
+                    }
+                    if (!isField(current)) return;
+
+                    const appScope = D.querySelector('[data-testid="stAppViewContainer"]') || D.body;
+                    const scope = current.closest('form') || current.closest('[data-testid="stForm"]') || appScope;
+                    
+                    const fields = getFields(scope);
+                    const idx = fields.indexOf(current);
+                    
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    if (idx >= 0 && idx + 1 < fields.length) {
+                        // Move to next field
+                        const nxt = fields[idx + 1];
+                        setTimeout(() => focusEl(nxt), 10);
+                    } else {
+                        // Last field - trigger submit
+                        const btn = nearestSubmit(scope, current);
+                        if (btn) {
+                            btn.click();
+                            // Visual feedback
+                            btn.style.transform = "scale(0.95)";
+                            setTimeout(() => { btn.style.transform = ""; }, 100);
+                        }
+                    }
+                }
+
+                D.addEventListener('keydown', onKeyDown, true);
+                D.__poStoreEnterBoundV5 = true;
+                console.log("🚀 poStore Pro-Navigation Active");
+            } catch (err) {
+                console.error("Navigation error:", err);
+            }
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
 # --- CACHED DATA OPERATIONS ---
 
 @st.cache_data(ttl=300)
 def get_all_items():
     """Fetch all items from Firestore with caching to reduce reads and improve speed."""
     try:
-        items_ref = db.collection("items_master").stream()
+        # Fetch only necessary fields to reduce API footprint
+        items_ref = db.collection("items_master").select(["name", "price", "cost_price", "stock", "barcode"]).stream()
         # Convert to dictionary for easy lookup: {id: data}
         items_dict = {item.id: item.to_dict() for item in items_ref}
         return items_dict
@@ -653,51 +1005,158 @@ def get_all_items():
         return {}
 
 def clear_items_cache():
-    """Clear the items cache to force a refresh."""
-    st.cache_data.clear()
+    """Clear only the items-related caches (surgical — does NOT wipe all caches)."""
+    get_all_items.clear()
+
+def clear_dashboard_cache():
+    """Clear dashboard KPI caches only."""
+    get_dashboard_kpis.clear()
+    get_dashboard_alerts.clear()
+
+def clear_expenses_cache():
+    """Clear only the expenses cache."""
+    # Imported pages use their own local @st.cache_data, so we signal via session state
+    st.session_state["_expenses_cache_bust"] = st.session_state.get("_expenses_cache_bust", 0) + 1
+
+def clear_credit_cache():
+    """Clear only the credit book cache."""
+    st.session_state["_credit_cache_bust"] = st.session_state.get("_credit_cache_bust", 0) + 1
+
+# ── Cached Dashboard Data Fetchers ──────────────────────────────────────────
+@st.cache_data(ttl=300, show_spinner=False)
+def get_dashboard_kpis(today_str: str):
+    """Fetch all KPI data for the dashboard in as few queries as possible."""
+    try:
+        sales_docs   = db.collection("sales").where("date", "==", today_str).stream()
+        sales_list   = [s.to_dict() for s in sales_docs if not s.to_dict().get("voided", False)]
+        gross_revenue    = sum(s.get("total", 0) for s in sales_list)
+        today_orders     = len(sales_list)
+        today_items_sold = sum(sum(it.get("qty", 0) for it in s.get("items", [])) for s in sales_list)
+        today_cogs       = sum(sum(it.get("cost", 0) * it.get("qty", 0) for it in s.get("items", [])) for s in sales_list)
+
+        rets_docs    = db.collection("returns").where("date", "==", today_str).stream()
+        returns_list = [r.to_dict() for r in rets_docs]
+        total_refunded   = sum(r.get("return_amount", 0) for r in returns_list)
+        prior_ret_rev    = sum(r.get("return_amount", 0) for r in returns_list if r.get("original_sale_date", today_str) != today_str)
+        prior_ret_cogs   = sum(sum(i.get("cost", 0) * i.get("qty", 0) for i in r.get("return_items", [])) for r in returns_list if r.get("original_sale_date", today_str) != today_str)
+
+        exp_docs     = db.collection("expenses").where("date", "==", today_str).stream()
+        today_expenses   = sum(e.to_dict().get("amount", 0) for e in exp_docs)
+
+        items_count  = len(get_all_items())
+
+        net_revenue  = gross_revenue - prior_ret_rev
+        gross_profit = gross_revenue - today_cogs
+        net_profit   = gross_profit - (prior_ret_rev - prior_ret_cogs) - today_expenses
+
+        return {
+            "gross_revenue":    gross_revenue,
+            "today_orders":     today_orders,
+            "today_items_sold": today_items_sold,
+            "net_revenue":      net_revenue,
+            "returns_count":    len(returns_list),
+            "total_refunded":   total_refunded,
+            "today_expenses":   today_expenses,
+            "net_profit":       net_profit,
+            "items_count":      items_count,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@st.cache_data(ttl=180)
+def get_dashboard_alerts():
+    """Fetch low-stock and credit alert data for the dashboard."""
+    try:
+        low_items = db.collection("items_master").where("stock", "<=", 5).stream()
+        low_list  = [(i.to_dict().get("name", "?"), i.to_dict().get("stock", 0)) for i in low_items]
+    except Exception:
+        low_list  = []
+
+    try:
+        credit_sales = db.collection("sales").where("payment_method", "in", ["Credit / Due", "Credit/Due"]).stream()
+        credit_total = sum(s.to_dict().get("total", 0) for s in credit_sales if not s.to_dict().get("voided", False))
+        credit_pmts  = db.collection("credit_payments").stream()
+        paid_total   = sum(p.to_dict().get("amount", 0) for p in credit_pmts)
+        outstanding  = max(0, credit_total - paid_total)
+    except Exception:
+        outstanding  = 0
+
+    return {"low_list": low_list, "outstanding": outstanding}
+
+@st.cache_data(ttl=60)
+def get_recent_transactions(limit: int = 10):
+    """Fetch recent transactions for the dashboard."""
+    from datetime import datetime as _dt
+    rows = []
+    try:
+        recent_docs = db.collection("sales").order_by("timestamp", direction="DESCENDING").limit(max(limit * 3, limit)).stream()
+        for doc in recent_docs:
+            d  = doc.to_dict()
+            if d.get("voided", False):
+                continue
+            ts = d.get("timestamp")
+            rows.append({
+                "Time":     ts.strftime("%I:%M %p") if isinstance(ts, _dt) else "N/A",
+                "Date":     d.get("date", "N/A"),
+                "Customer": d.get("customer_name", "N/A"),
+                "Items":    len(d.get("items", [])),
+                "Total":    f"₹{d.get('total', 0):,.0f}",
+                "Mode":     d.get("payment_method", "Cash"),
+            })
+            if len(rows) >= limit:
+                break
+    except Exception:
+        pass
+    return rows
 
 # --- CUSTOM SIDEBAR ---
 
 def render_sidebar():
-    """Render a custom sidebar using streamlit-option-menu styled links"""
-    # On app.py, we don't want to stop execution if not authenticated
-    # because the login screen needs to be shown.
+    """Render a custom sidebar with navigation links, refresh and logout."""
     if not st.session_state.get("authenticated", False):
         return
     try:
+        is_admin = st.session_state.get("user_role", "user") == "admin"
         with st.sidebar:
             st.subheader("GMR Store Manager")
+            st.caption(f"Signed in as: {st.session_state.get('user_name', '')} ({'Admin' if is_admin else 'User'})")
             st.markdown("---")
-            
+
             # Dashboard
             st.page_link("app.py", label="Dashboard", icon="🏠")
-            
+
             # Core Operations
             st.markdown("###### Operations", help="Manage daily tasks")
             st.page_link("pages/2_Sales.py", label="New Sale", icon="🛒")
             st.page_link("pages/1_Items_Master.py", label="Inventory / Items", icon="📦")
-            st.page_link("pages/4_Credit_Book.py", label="Credit Book (Udhaar)", icon="📙")
-            st.page_link("pages/6_Expense_Tracker.py", label="Daily Expense Tracker", icon="💸")
+            if is_admin:
+                st.page_link("pages/4_Credit_Book.py", label="Credit Book (Udhaar)", icon="📙")
+                st.page_link("pages/6_Expense_Tracker.py", label="Daily Expense Tracker", icon="💸")
             st.page_link("pages/5_Returns.py", label="Returns / Exchange", icon="↩️")
-            st.page_link("pages/8_Stock_Adjustments.py", label="Stock Adjustments", icon="📦")
-            
+            if is_admin:
+                st.page_link("pages/8_Stock_Adjustments.py", label="Stock Adjustments", icon="📦")
+
             # History & Reports
             st.markdown("###### History & Reports", help="View past data")
             st.page_link("pages/7_Sales_History.py", label="Sales History", icon="📜")
-            st.page_link("pages/3_Reports.py", label="Reports", icon="📊")
-            
+            if is_admin:
+                st.page_link("pages/3_Reports.py", label="Reports", icon="📊")
+
             st.markdown("###### System", help="App Settings")
-            st.page_link("pages/9_Settings.py", label="Settings", icon="⚙️")
-            
+            if is_admin:
+                st.page_link("pages/9_Settings.py", label="Settings", icon="⚙️")
+
             st.markdown("---")
-            if st.button("Refresh Data", type="secondary", use_container_width=True):
-                clear_items_cache()
+            if st.button("🔄 Refresh Data", type="secondary", use_container_width=True):
+                get_all_items.clear()
+                get_dashboard_kpis.clear()
+                get_dashboard_alerts.clear()
+                get_recent_transactions.clear()
                 st.rerun()
-                
+
             st.caption(f"v1.2.0 • {get_ist_time().strftime('%d-%b')}")
-            
-            if st.button("Logout", use_container_width=True):
-                # Clear local storage via JS
+
+            if st.button("🚪 Logout", use_container_width=True):
                 st.markdown("""
                     <script>
                         localStorage.removeItem('gmr_auth_session');
@@ -708,7 +1167,7 @@ def render_sidebar():
                 st.session_state["username"] = None
                 st.session_state["user_role"] = None
                 st.rerun()
-            
+
     except Exception as e:
         st.error(f"Sidebar Error: {e}")
 
